@@ -5,55 +5,77 @@
 close all
 clear
 
-countries = {'BR','IN','US','SP', 'JP', 'all'};
+cfg      = read_config();
+countries = cfg.countries_all;
+subjects  = [cfg.subjects_dir '/'];
 
-subjects = ['final&new_subjects/'];
+%% === Set up Python environment ===
+% Pass project root to Python scripts via environment variable.
+% NOTE: MATLAB's setenv() does not reliably propagate to the embedded
+% Python interpreter's os.environ (confirmed on this setup), so we set
+% it directly through Python as well.
+project_root = fileparts(mfilename('fullpath'));
+setenv('EMBODY_PROJECT_ROOT', project_root);   % harmless to keep, in case other tools check it
+py.os.environ().update(py.dict(pyargs('EMBODY_PROJECT_ROOT', project_root)));
 
-% Clear both output directories for every region being processed
-for i = 1:length(countries)
-    subdir = countries{i};
-
-    preproc_dir     = [subjects subdir '/preprocessed'];
-    unfiltered_dir  = [subjects subdir '/unfiltered'];
-
-    for d = {preproc_dir, unfiltered_dir}
-        dpath = d{1};
-        if exist(dpath, 'dir')
-            rmdir(dpath, 's');
-            fprintf('Cleared directory: %s\n', dpath);
-        end
-        mkdir(dpath);
-    end
+% Add config folder to Python path so config_loader.py can be found
+config_dir = fullfile(project_root, 'config');
+if count(py.sys.path, config_dir) == 0
+    py.sys.path().insert(int32(0), config_dir);
+end
+% Add python_scripts folder too (if scripts live there)
+py_dir = fullfile(project_root, 'python_scripts');
+if count(py.sys.path, py_dir) == 0
+    py.sys.path().insert(int32(0), py_dir);
 end
 
-% Process each region
-for i = 1:length(countries)
-    subdir = countries{i};
-    process_region_directory([subjects subdir]);
+
+
+%% === Clean-slate toggle ===
+fprintf('================================================================\n');
+fprintf('  PREPROCESSING MODE\n');
+fprintf('================================================================\n');
+fprintf('  (1) Full run  — clear all output dirs and reprocess everything\n');
+fprintf('  (2) Skip      — skip pixel processing, go straight to pruning\n');
+fprintf('================================================================\n');
+mode = input('  >> Enter 1 or 2: ', 's');
+do_pixel_processing = strcmp(strtrim(mode), '1');
+
+if do_pixel_processing
+    % Clear both output directories for every region being processed
+    for i = 1:length(countries)
+        subdir = countries{i};
+        preproc_dir    = [subjects subdir '/preprocessed'];
+        unfiltered_dir = [subjects subdir '/unfiltered'];
+        for d = {preproc_dir, unfiltered_dir}
+            dpath = d{1};
+            if exist(dpath, 'dir')
+                rmdir(dpath, 's');
+                fprintf('Cleared directory: %s\n', dpath);
+            end
+            mkdir(dpath);
+        end
+    end
+
+    % Process each region
+    for i = 1:length(countries)
+        process_region_directory([subjects countries{i}]);
+    end
+else
+    fprintf('\nSkipping pixel processing — using existing output dirs.\n\n');
 end
 
 %% === Export subject lists ===
-% Writes subject_list_preprocessed.csv and subject_list_unfiltered.csv
-% and prints counts before pruning.
 export_subject_lists(subjects, countries);
 
-%% === Pruning pause ===
-fprintf('\n');
-fprintf('================================================================\n');
-fprintf('  PRUNING STEP\n');
-fprintf('================================================================\n');
-fprintf('  Subject lists have been exported to:\n');
-fprintf('    final&new_subjects/subject_list_preprocessed.csv\n');
-fprintf('    final&new_subjects/subject_list_unfiltered_preprocessed.csv\n');
-fprintf('\n');
-fprintf('  Please now switch to Python and run prune_subjects.py.\n');
-fprintf('  This will generate:\n');
-fprintf('    final&new_subjects/preprocessing_remove_paired.csv\n');
-fprintf('    final&new_subjects/preprocessing_remove_unfiltered.csv\n');
-fprintf('\n');
-fprintf('  Once both files exist, press Enter here to continue.\n');
-fprintf('================================================================\n');
-input('  >> Press Enter to continue with pruning: ', 's');
+fprintf('\nRunning generate_removal_lists.py...\n');
+fprintf('DEBUG: EMBODY_PROJECT_ROOT (MATLAB) = %s\n', getenv('EMBODY_PROJECT_ROOT'));
+fprintf('DEBUG: Python sees os.environ.get = %s\n', char(py.os.environ().get('EMBODY_PROJECT_ROOT', 'NOT SET')));
+pyrunfile(fullfile(pwd, 'python_scripts', 'generate_removal_lists.py'));
+
+%% === Generate removal lists (Python) ===
+fprintf('\nRunning generate_removal_lists.py...\n');
+pyrunfile(fullfile(pwd, 'python_scripts', 'generate_removal_lists.py'));
 
 %% === Apply pruning ===
 apply_pruning(subjects, countries);
@@ -62,18 +84,15 @@ apply_pruning(subjects, countries);
 fprintf('\n=== Subject counts after pruning ===\n');
 export_subject_lists(subjects, countries);
 
+%% === Build combined_data_all.csv (Python) ===
+fprintf('\nRunning build_combined_data.py...\n');
+pyrunfile(fullfile(pwd, 'python_scripts', 'build_combined_data.py'));
+
 
 %% =========================================================
 function process_region_directory(basepath)
-%  For every subject in basepath/subjects/ this function:
-%    1. Reconstructs per-trial body maps (resmat)
-%    2. Saves ALL trials + averages to  basepath/unfiltered/
-%    3. Saves only PAIRED trials + averages to basepath/preprocessed/
-
     fprintf('%s\n', basepath);
 
-    % Run renaming and setup helpers first, so that subjects dir() reflects
-    % the final folder names (e.g. after R_ prefix removal by fixSubjectNaming)
     fixSubjectNaming([basepath '/subjects/']);
     generate_presentations([basepath '/subjects/']);
     rename_trials([basepath '/subjects/']);
@@ -81,18 +100,15 @@ function process_region_directory(basepath)
     subjects = dir([basepath '/subjects/*']);
 
     base  = uint8(imread('base.png'));
-    base2 = base(10:531, 33:203, :);  %#ok<NASGU>  kept for visualisation
-    mask  = imread('mask.png');        %#ok<NASGU>  kept for visualisation
+    base2 = base(10:531, 33:203, :);  %#ok<NASGU>
+    mask  = imread('mask.png');        %#ok<NASGU>
 
     for s = 1:length(subjects)
-        if subjects(s).name(1) == '.'
-            continue;
-        end
+        if subjects(s).name(1) == '.', continue; end
 
         fprintf('Processing subject %s...\n', subjects(s).name);
         subj_path = [basepath '/subjects/' subjects(s).name];
 
-        %% --- Load presentation order ---
         pres_file = fullfile(subj_path, 'presentation.txt');
         if ~isfile(pres_file)
             fprintf('  Missing presentation.txt for %s, skipping.\n', subjects(s).name);
@@ -102,10 +118,8 @@ function process_region_directory(basepath)
         filelist = filelist(filelist ~= "");
         NC = numel(filelist);
 
-        %% --- Load subject data ---
         data = load_subj(subj_path, 2, subjects(s).name);
 
-        %% --- Identify condition types from filenames ---
         nostalgia_idx    = [];
         control_idx      = [];
         nostalgia_trials = {};
@@ -122,14 +136,11 @@ function process_region_directory(basepath)
             end
         end
 
-        %% --- Must have at least nostalgia trials to be useful ---
         if isempty(nostalgia_idx)
             fprintf('  DISCARDING %s: No nostalgia trials\n', subjects(s).name);
             continue;
         end
 
-        %% --- Reconstruct body maps ---
-        % Cropped size: rows 10:531 -> 522 rows, cols 33:203 -> 171 cols
         resmat = zeros(522, 171, NC);
         for n = 1:NC
             T    = length(data(n).paint(:,2));
@@ -144,15 +155,11 @@ function process_region_directory(basepath)
             resmat(:,:,n) = over(10:531,33:203,:) - over(10:531,696:866,:);
         end
 
-        %% --- Extract numeric trial IDs ---
         nostalgia_numbers = extract_trial_numbers(nostalgia_trials, 'Nost');
         control_numbers   = extract_trial_numbers(control_trials,   'Cont');
 
-        %% =====================================================
-        %  PIPELINE A: ALL trials  ->  unfiltered/
-        %% =====================================================
+        %% PIPELINE A: ALL trials -> unfiltered/
         trial_data_all = struct();
-
         for i = 1:length(nostalgia_idx)
             tname = sprintf('Nost%d', nostalgia_numbers(i));
             trial_data_all.(tname) = resmat(:,:,nostalgia_idx(i));
@@ -161,28 +168,21 @@ function process_region_directory(basepath)
             tname = sprintf('Cont%d', control_numbers(i));
             trial_data_all.(tname) = resmat(:,:,control_idx(i));
         end
-
         trial_data_all.nostalgia_avg = mean(resmat(:,:,nostalgia_idx), 3);
         if ~isempty(control_idx)
             trial_data_all.control_avg = mean(resmat(:,:,control_idx), 3);
         end
+        save([basepath '/unfiltered/' subjects(s).name '_preprocessed.mat'], '-struct', 'trial_data_all');
 
-        unfiltered_dir = [basepath '/unfiltered/'];
-        save([unfiltered_dir subjects(s).name '_preprocessed.mat'], '-struct', 'trial_data_all');
-
-        %% =====================================================
-        %  PIPELINE B: PAIRED trials only  ->  preprocessed/
-        %% =====================================================
+        %% PIPELINE B: PAIRED trials only -> preprocessed/
         if isempty(control_idx)
             fprintf('  Skipping paired save for %s: No control trials\n', subjects(s).name);
         else
             common_trials = intersect(nostalgia_numbers, control_numbers);
-
             if isempty(common_trials)
                 fprintf('  Skipping paired save for %s: No matching trial pairs\n', subjects(s).name);
             else
                 fprintf('  Found %d valid trial pairs for %s\n', length(common_trials), subjects(s).name);
-
                 trial_data_paired = struct();
                 valid_nost_idx    = [];
                 valid_cont_idx    = [];
@@ -205,20 +205,15 @@ function process_region_directory(basepath)
                 trial_data_paired.nostalgia_avg = mean(resmat(:,:,valid_nost_idx), 3);
                 trial_data_paired.control_avg   = mean(resmat(:,:,valid_cont_idx), 3);
                 trial_data_paired.valid_pairs   = common_trials;
-
-                preproc_dir = [basepath '/preprocessed/'];
-                save([preproc_dir subjects(s).name '_preprocessed.mat'], '-struct', 'trial_data_paired');
+                save([basepath '/preprocessed/' subjects(s).name '_preprocessed.mat'], '-struct', 'trial_data_paired');
             end
         end
-
-    end % subject loop
-end % process_region_directory
+    end
+end
 
 
 %% =========================================================
 function numbers = extract_trial_numbers(trial_list, prefix)
-%  Pull the numeric suffix from filenames like 'Nost03', 'Cont1', etc.
-%  Falls back to the list index if no number is found.
     numbers = zeros(1, length(trial_list));
     pattern = [prefix '(\d+)'];
     for i = 1:length(trial_list)
@@ -234,22 +229,11 @@ end
 
 %% =========================================================
 function export_subject_lists(base_path, countries)
-%  Scans preprocessed/ and unfiltered/ for each country, collects
-%  subject names, writes two CSV files, and prints counts to console.
-%
-%  Output files (written to base_path root):
-%    subject_list_preprocessed.csv  -- paired-only pipeline
-%    subject_list_unfiltered.csv    -- all-trials pipeline
-%
-%  CSV format:
-%    subject,country
-
     out_paired = fullfile(base_path, 'subject_list_preprocessed.csv');
     out_all    = fullfile(base_path, 'subject_list_unfiltered.csv');
 
     fid_paired = fopen(out_paired, 'w');
     fid_all    = fopen(out_all,    'w');
-
     fprintf(fid_paired, 'subject,country\n');
     fprintf(fid_all,    'subject,country\n');
 
@@ -257,71 +241,45 @@ function export_subject_lists(base_path, countries)
     fprintf('%-10s  %12s  %14s\n', 'Country', 'preprocessed', 'unfiltered');
     fprintf('%s\n', repmat('-', 1, 44));
 
-    total_paired = 0;
-    total_all    = 0;
-
+    total_paired = 0; total_all = 0;
     for i = 1:length(countries)
         country = countries{i};
-
-        paired_dir = fullfile(base_path, country, 'preprocessed');
-        unf_dir    = fullfile(base_path, country, 'unfiltered');
-
-        % Collect paired subjects
-        paired_files = dir(fullfile(paired_dir, '*_preprocessed.mat'));
-        n_paired = length(paired_files);
-        for j = 1:n_paired
+        paired_files = dir(fullfile(base_path, country, 'preprocessed', '*_preprocessed.mat'));
+        unf_files    = dir(fullfile(base_path, country, 'unfiltered',   '*_preprocessed.mat'));
+        for j = 1:length(paired_files)
             subj_name = strrep(paired_files(j).name, '_preprocessed.mat', '');
             fprintf(fid_paired, '%s,%s\n', subj_name, country);
         end
-
-        % Collect unfiltered subjects
-        unf_files = dir(fullfile(unf_dir, '*_preprocessed.mat'));
-        n_all = length(unf_files);
-        for j = 1:n_all
+        for j = 1:length(unf_files)
             subj_name = strrep(unf_files(j).name, '_preprocessed.mat', '');
             fprintf(fid_all, '%s,%s\n', subj_name, country);
         end
-
-        fprintf('%-10s  %12d  %16d\n', country, n_paired, n_all);
-        total_paired = total_paired + n_paired;
-        total_all    = total_all    + n_all;
+        fprintf('%-10s  %12d  %16d\n', country, length(paired_files), length(unf_files));
+        total_paired = total_paired + length(paired_files);
+        total_all    = total_all    + length(unf_files);
     end
-
     fprintf('%s\n', repmat('-', 1, 44));
     fprintf('%-10s  %12d  %16d\n', 'TOTAL', total_paired, total_all);
-    fprintf('\n');
-
-    fclose(fid_paired);
-    fclose(fid_all);
-
+    fclose(fid_paired); fclose(fid_all);
     fprintf('Subject lists written to:\n  %s\n  %s\n', out_paired, out_all);
-    fprintf('  (unfiltered list: subject_list_unfiltered.csv)\n');
 end
+
 
 %% =========================================================
 function apply_pruning(base_path, countries)
-%  Reads preprocessing_remove_paired.csv and preprocessing_remove_all.csv
-%  from base_path, then deletes the corresponding .mat files from:
-%    - <country>/preprocessed/        (paired removal list)
-%    - <country>/unfiltered/          (unfiltered removal list)
-%    - all/preprocessed/              (paired removal list,   aggregate dir)
-%    - all/unfiltered/                (unfiltered removal list, aggregate dir)
-
     remove_paired_file = fullfile(base_path, 'preprocessing_remove_paired.csv');
     remove_all_file    = fullfile(base_path, 'preprocessing_remove_unfiltered.csv');
 
-    % ── Validate files exist ──────────────────────────────────────────────
     if ~isfile(remove_paired_file)
-        error('Missing pruning file: %s\nRun prune_subjects.py first.', remove_paired_file);
+        error('Missing pruning file: %s\nRun generate_removal_lists.py first.', remove_paired_file);
     end
     if ~isfile(remove_all_file)
-        error('Missing pruning file: %s\nRun prune_subjects.py first.', remove_all_file);
+        error('Missing pruning file: %s\nRun generate_removal_lists.py first.', remove_all_file);
     end
 
     remove_paired = readtable(remove_paired_file, 'TextType', 'string');
     remove_all    = readtable(remove_all_file,    'TextType', 'string');
 
-    % ── Helper: delete a .mat for one subject from one directory ──────────
     function delete_subject_mat(dir_path, subj_name)
         mat_file = fullfile(dir_path, [char(subj_name) '_preprocessed.mat']);
         if isfile(mat_file)
@@ -332,29 +290,20 @@ function apply_pruning(base_path, countries)
         end
     end
 
-    % ── Apply paired removals ─────────────────────────────────────────────
     fprintf('\n--- Applying paired (preprocessed/) removals ---\n');
     for i = 1:height(remove_paired)
         subj    = remove_paired.subject(i);
         country = remove_paired.country(i);
-
-        % Remove from country-specific preprocessed/
         delete_subject_mat(fullfile(base_path, country, 'preprocessed'), subj);
-        % Remove from aggregate 'all' preprocessed/
-        delete_subject_mat(fullfile(base_path, 'all', 'preprocessed'), subj);
+        delete_subject_mat(fullfile(base_path, 'all',   'preprocessed'), subj);
     end
 
-    % ── Apply unfiltered removals ─────────────────────────────────────────
     fprintf('\n--- Applying unfiltered (unfiltered/) removals ---\n');
     for i = 1:height(remove_all)
         subj    = remove_all.subject(i);
         country = remove_all.country(i);
-
-        % Remove from country-specific unfiltered/
         delete_subject_mat(fullfile(base_path, country, 'unfiltered'), subj);
-        % Remove from aggregate 'all' unfiltered/
-        delete_subject_mat(fullfile(base_path, 'all', 'unfiltered'), subj);
+        delete_subject_mat(fullfile(base_path, 'all',   'unfiltered'), subj);
     end
-
     fprintf('\nPruning complete.\n');
 end

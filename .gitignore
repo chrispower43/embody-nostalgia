@@ -35,3 +35,28 @@ codegen/
 # buildtool cache folder
 .buildtool/
 
+# ── Raw / large data folders (subject data, not code) ──────────
+final&new_subjects/
+final&new_subjects - Copy/
+final&new_subjects - June 18/
+Old subjects/
+demo_subjects/
+qualtrics_data/
+prolific_data/
+config/
+
+# ── Generated results / outputs ─────────────────────────────────
+pictures/
+*.mat
+combined_data_all.csv
+all_subjects_list.csv
+plot_all_csv.csv
+
+# ── Archives ─────────────────────────────────────────────────────
+*.zip
+
+# ── OS / editor junk ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.asv
+*.m~
