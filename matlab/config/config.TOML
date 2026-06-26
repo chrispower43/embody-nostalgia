@@ -1,0 +1,56 @@
+# ============================================================
+#  Embody Nostalgia — shared project configuration
+#  Read by both Python scripts (tomllib / tomli) and MATLAB
+#  (read_config.m helper).
+#
+#  To run the pipeline on a different cohort, edit the paths
+#  under [paths] and re-run preprocessing.m.  Everything
+#  else — picture prefixes, CSV names, targets — updates
+#  automatically from those paths.
+# ============================================================
+
+# ── Active cohort ─────────────────────────────────────────────
+# The root folder that contains per-country subfolders and
+# the subject list CSVs.  Change this to switch cohorts without
+# touching any script.
+#
+# Examples:
+#   subjects_dir = "final&new_subjects"          # main cohort
+#   subjects_dir = "final&new_subjects - Copy"   # backup / test run
+[paths]
+subjects_dir      = "final&new_subjects"
+qualtrics_data    = "qualtrics_data"
+prolific_data     = "prolific_data"
+
+# Output CSV written by build_combined_data.py
+combined_csv      = "combined_data_all.csv"
+
+# ── Countries ─────────────────────────────────────────────────
+[countries]
+list = ["BR", "IN", "US", "SP", "JP"]      # per-country processing
+with_aggregate = ["BR", "IN", "US", "SP", "JP", "all"]   # includes 'all' dir
+
+# ── Pruning targets (subjects to KEEP per country) ────────────
+[pruning]
+target_paired    = 60    # paired / preprocessed pipeline
+target_all       = 70    # all-trials / unfiltered pipeline
+
+# ── Picture output ────────────────────────────────────────────
+# All figures are saved under pictures/<subfolder>/.
+# A run prefix is prepended to every filename so outputs from
+# different cohorts never overwrite each other.
+#
+# The prefix is derived automatically by the scripts from the
+# last component of paths.subjects_dir:
+#   "final&new_subjects"          ->  prefix = ""  (no prefix)
+#   "final&new_subjects - Copy"   ->  prefix = "Copy_"
+#   "pilot_data"                  ->  prefix = "pilot_data_"
+#
+# Override here if you want a custom label (leave empty for auto):
+[pictures]
+prefix_override = ""     # e.g. "v2_" — overrides the auto-derived prefix
+
+[pictures.subfolders]
+pq0        = "PQ0"
+pq1and3    = "PQ1&3"
+regression = "regression"

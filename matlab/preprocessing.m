@@ -266,19 +266,50 @@ end
 
 
 %% =========================================================
+%% This function allows the user to provide a .csv of subjects to be not included in analysis
+%% Default behavior is to truncate subjects so each country has equal contribution (i.e. 60 subjects per country)
 function apply_pruning(base_path, countries)
-    remove_paired_file = fullfile(base_path, 'preprocessing_remove_paired.csv');
-    remove_all_file    = fullfile(base_path, 'preprocessing_remove_unfiltered.csv');
 
-    if ~isfile(remove_paired_file)
-        error('Missing pruning file: %s\nRun generate_removal_lists.py first.', remove_paired_file);
-    end
-    if ~isfile(remove_all_file)
-        error('Missing pruning file: %s\nRun generate_removal_lists.py first.', remove_all_file);
+    function chosen = prompt_for_csv(base_path, pipeline_label, default_filename)
+        fprintf('\n--- Pruning for %s pipeline ---\n', pipeline_label);
+        fprintf('  [1] Use default (%s)\n', default_filename);
+        fprintf('  [2] Skip pruning\n');
+        fprintf('  [3] Enter custom filename\n');
+
+        while true
+            sel = input('  >> Enter 1, 2, or 3: ', 's');
+            switch strtrim(sel)
+                case '1'
+                    chosen = fullfile(base_path, default_filename);
+                    if ~isfile(chosen)
+                        fprintf('  ERROR: Default file not found: %s\n', chosen);
+                        fprintf('  Please choose another option.\n');
+                        continue;
+                    end
+                    fprintf('  Using: %s\n', default_filename);
+                    return;
+                case '2'
+                    chosen = '';
+                    fprintf('  Skipping pruning for %s pipeline.\n', pipeline_label);
+                    return;
+                case '3'
+                    fname = input('  >> Enter filename (relative to subjects dir): ', 's');
+                    chosen = fullfile(base_path, strtrim(fname));
+                    if ~isfile(chosen)
+                        fprintf('  ERROR: File not found: %s\n', chosen);
+                        fprintf('  Please try again.\n');
+                        continue;
+                    end
+                    fprintf('  Using: %s\n', fname);
+                    return;
+                otherwise
+                    fprintf('  Invalid selection, please enter 1, 2, or 3.\n');
+            end
+        end
     end
 
-    remove_paired = readtable(remove_paired_file, 'TextType', 'string');
-    remove_all    = readtable(remove_all_file,    'TextType', 'string');
+    remove_paired_file = prompt_for_csv(base_path, 'paired (preprocessed/)', 'preprocessing_remove_paired.csv');
+    remove_all_file    = prompt_for_csv(base_path, 'unfiltered',             'preprocessing_remove_unfiltered.csv');
 
     function delete_subject_mat(dir_path, subj_name)
         mat_file = fullfile(dir_path, [char(subj_name) '_preprocessed.mat']);
@@ -290,20 +321,31 @@ function apply_pruning(base_path, countries)
         end
     end
 
-    fprintf('\n--- Applying paired (preprocessed/) removals ---\n');
-    for i = 1:height(remove_paired)
-        subj    = remove_paired.subject(i);
-        country = remove_paired.country(i);
-        delete_subject_mat(fullfile(base_path, country, 'preprocessed'), subj);
-        delete_subject_mat(fullfile(base_path, 'all',   'preprocessed'), subj);
+    if ~isempty(remove_paired_file)
+        remove_paired = readtable(remove_paired_file, 'TextType', 'string');
+        fprintf('\n--- Applying paired (preprocessed/) removals ---\n');
+        for i = 1:height(remove_paired)
+            subj    = remove_paired.subject(i);
+            country = remove_paired.country(i);
+            delete_subject_mat(fullfile(base_path, country, 'preprocessed'), subj);
+            delete_subject_mat(fullfile(base_path, 'all',   'preprocessed'), subj);
+        end
+    else
+        fprintf('\n--- Skipped paired (preprocessed/) pruning ---\n');
     end
 
-    fprintf('\n--- Applying unfiltered (unfiltered/) removals ---\n');
-    for i = 1:height(remove_all)
-        subj    = remove_all.subject(i);
-        country = remove_all.country(i);
-        delete_subject_mat(fullfile(base_path, country, 'unfiltered'), subj);
-        delete_subject_mat(fullfile(base_path, 'all',   'unfiltered'), subj);
+    if ~isempty(remove_all_file)
+        remove_all = readtable(remove_all_file, 'TextType', 'string');
+        fprintf('\n--- Applying unfiltered (unfiltered/) removals ---\n');
+        for i = 1:height(remove_all)
+            subj    = remove_all.subject(i);
+            country = remove_all.country(i);
+            delete_subject_mat(fullfile(base_path, country, 'unfiltered'), subj);
+            delete_subject_mat(fullfile(base_path, 'all',   'unfiltered'), subj);
+        end
+    else
+        fprintf('\n--- Skipped unfiltered pruning ---\n');
     end
+
     fprintf('\nPruning complete.\n');
 end

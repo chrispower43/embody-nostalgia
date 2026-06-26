@@ -58,22 +58,17 @@ COUNTRIES     = cfg.countries
 print("Scanning all_preprocessed directories for subject IDs...")
 subjects_by_country: dict[str, list[str]] = {}
 
-for country in COUNTRIES + ["all"]:
-    country_dir = SUBJECTS_ROOT / country / "unfiltered"
-    subjects: list[str] = []
-    if country_dir.exists():
-        for mat_file in country_dir.glob("*_preprocessed.mat"):
-            # File name pattern: <subjectID>_preprocessed.mat
-            subject_id = mat_file.name.replace("_preprocessed.mat", "")
-            subjects.append(f"R_{subject_id}")   # restore R_ prefix for Qualtrics matching
-    subjects.sort()
-    subjects_by_country[country] = subjects
-    print(f"  {country}: {len(subjects)} subjects found")
+subjects_source_dir = SUBJECTS_ROOT / "all" / "subjects"
+all_subject_ids: list[str] = []
+if subjects_source_dir.exists():
+    for entry in sorted(subjects_source_dir.iterdir()):
+        if entry.is_dir() and not entry.name.startswith("."):
+            all_subject_ids.append(f"R_{entry.name}")
 
-# Build a flat set of all processed subject IDs (with R_ prefix)
-processed_subjects: set[str] = set()
-for country in COUNTRIES:
-    processed_subjects.update(subjects_by_country[country])
+# Then use all_subject_ids for every country (Qualtrics filter handles country assignment)
+for country in COUNTRIES + ["all"]:
+    subjects_by_country[country] = all_subject_ids
+processed_subjects = set(all_subject_ids)
 
 # Save the all-subjects list (mirrors the old all_subjects_list.csv)
 all_subjects_df = pd.DataFrame(

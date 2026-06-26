@@ -247,6 +247,58 @@ end
 
 fprintf('\nDiagnostics complete.\n');
 
+%% ── 7.  Cross-check: preprocessed subject list vs combined_data_all.csv ──────
+fprintf('\n=== Cross-check: subject_list_preprocessed vs combined_data_all.csv ===\n');
+
+subj_list_path = fullfile('final&new_subjects', 'subject_list_preprocessed.csv');
+
+if ~isfile(subj_list_path)
+    fprintf('  WARNING: %s not found, skipping this check.\n', subj_list_path);
+else
+    opts2 = detectImportOptions(subj_list_path, 'TextType', 'string', ...
+                                'VariableNamingRule', 'preserve');
+    subj_list = readtable(subj_list_path, opts2);
+    fprintf('  Rows in subject_list_preprocessed.csv : %d\n', height(subj_list));
+
+    % Deduplicate — the 'all' country repeats every ID
+    list_ids = unique(string(subj_list.('subject')));
+    fprintf('  Unique subject IDs in list            : %d\n', numel(list_ids));
+
+    % IDs present in the combined CSV
+    csv_ids_set = string(survey.('ID'));
+
+    % Find which listed subjects are absent from the CSV
+    missing_mask = ~ismember(list_ids, csv_ids_set);
+    missing_ids  = list_ids(missing_mask);
+
+    fprintf('  Subjects in list also in CSV          : %d\n', numel(list_ids) - numel(missing_ids));
+    fprintf('  Subjects in list but MISSING from CSV : %d\n', numel(missing_ids));
+
+    if ~isempty(missing_ids)
+        fprintf('\n  --- Missing subject IDs ---\n');
+        for k = 1:numel(missing_ids)
+            fprintf('    %s\n', missing_ids(k));
+        end
+
+        % Break down by country (using the per-country rows, not 'all')
+        country_rows = subj_list(subj_list.('country') ~= "all", :);
+        fprintf('\n  --- Missing subjects by country ---\n');
+        countries_present = unique(string(country_rows.('country')));
+        for c = 1:numel(countries_present)
+            cname     = countries_present(c);
+            c_ids     = string(country_rows.('subject')(string(country_rows.('country')) == cname));
+            c_missing = c_ids(~ismember(c_ids, csv_ids_set));
+            fprintf('    %s : %d missing out of %d\n', cname, numel(c_missing), numel(c_ids));
+        end
+
+        fprintf('\n  ACTION: These subjects have preprocessed .mat files and are in\n');
+        fprintf('          subject_list_preprocessed.csv, but were never written into\n');
+        fprintf('          combined_data_all.csv. Re-run build_combined_data.py and\n');
+        fprintf('          check whether it scans ''preprocessed'' vs ''unfiltered'' dirs.\n');
+    else
+        fprintf('  All listed subjects are present in combined_data_all.csv.\n');
+    end
+end
 %% ── Helper ───────────────────────────────────────────────────────────────
 function s = ternary(cond, a, b)
     if cond, s = a; else, s = b; end
