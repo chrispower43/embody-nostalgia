@@ -15,10 +15,10 @@
 # touching any script.
 #
 # Examples:
-#   subjects_dir = "final&new_subjects"          # main cohort
-#   subjects_dir = "final&new_subjects - Copy"   # backup / test run
+#   subjects_dir = "subjects"          # main cohort
+#   subjects_dir = "subjects_cohort2"   # backup / test run
 [paths]
-subjects_dir      = "final&new_subjects"
+subjects_dir      = "subjects"
 qualtrics_data    = "qualtrics_data"
 prolific_data     = "prolific_data"
 

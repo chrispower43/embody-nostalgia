@@ -1,11 +1,18 @@
-%% Pixel-level Regression: Bodily Sensation ~ Positive/Negative Feelings
+%% Pixel-level Regression: Bodily Sensation ~ Positive/Negative/Min Feelings
 %  (Subject-level, nostalgia trials only)
 %
-% For each pixel, fits two OLS regressions ACROSS SUBJECTS (one data point
+% For each pixel, fits three OLS regressions ACROSS SUBJECTS (one data point
 % per subject, not per trial):
 %
-%   nostalgia_avg_pixel ~ beta0 + beta1 * mean(N1_pos..N4_pos)   (Model 1)
-%   nostalgia_avg_pixel ~ beta0 + beta1 * mean(N1_neg..N4_neg)   (Model 2)
+%   nostalgia_avg_pixel ~ beta0 + beta1 * mean(N1_pos..N4_pos)         (Model 1)
+%   nostalgia_avg_pixel ~ beta0 + beta1 * mean(N1_neg..N4_neg)         (Model 2)
+%   nostalgia_avg_pixel ~ beta0 + beta1 * mean(min(pos,neg) per trial) (Model 3)
+%
+% Model 3's predictor is the per-trial min of pos/neg, averaged across the
+% subject's 4 nostalgia trials: mean_k( min(N_k_pos, N_k_neg) ). This reflects
+% each trial's actual floor value rather than the min of two already-averaged
+% subject-level means (which can produce a value that never occurred on any
+% single trial).
 %
 % Each subject is required to have all 4 nostalgia trials with valid
 % (non-blank, non-DATA_EXPIRED) pos/neg ratings, since by study design every
@@ -22,6 +29,7 @@ clear; clc;
 cfg      = read_config();
 data_dir = fullfile(cfg.subjects_dir, 'all', 'unfiltered');
 csv_path  = cfg.combined_csv;
+pictures_dir = cfg.pic_regression;
 
 IMG_H = 522;
 IMG_W = 171;
@@ -51,6 +59,7 @@ subj_id        = strings(n_subj_total,1);
 subj_pixel     = nan(IMG_H, IMG_W, n_subj_total);
 subj_pos_mean  = nan(n_subj_total,1);
 subj_neg_mean  = nan(n_subj_total,1);
+subj_min_mean  = nan(n_subj_total,1);
 keep           = false(n_subj_total,1);
 
 n_skipped_nomatch  = 0;
@@ -117,6 +126,7 @@ for f = 1:n_subj_total
     subj_pixel(:,:,f)= pix;
     subj_pos_mean(f) = mean(pos_vals);
     subj_neg_mean(f) = mean(neg_vals);
+    subj_min_mean(f) = mean(min(pos_vals, neg_vals));
     keep(f)          = true;
 end
 
@@ -145,6 +155,7 @@ subj_id       = subj_id(keep);
 subj_pixel    = subj_pixel(:,:,keep);
 subj_pos_mean = subj_pos_mean(keep);
 subj_neg_mean = subj_neg_mean(keep);
+subj_min_mean = subj_min_mean(keep);
 
 % Each row here is ONE subject. df = n_subj - 2 downstream, exactly matching
 % the number of independent units of information -- no pseudoreplication.
@@ -157,6 +168,7 @@ Y = reshape(subj_pixel, n_pix, n_subj)';   % [n_subj x n_pix]
 fprintf('Computing subject-level regressions (N = %d subjects) ...\n', n_subj);
 [beta_pos, t_pos, p_pos] = ols_per_pixel(subj_pos_mean, Y);
 [beta_neg, t_neg, p_neg] = ols_per_pixel(subj_neg_mean, Y);
+[beta_min, t_min, p_min] = ols_per_pixel(subj_min_mean, Y);
 
 beta_pos = reshape(beta_pos, IMG_H, IMG_W);
 t_pos    = reshape(t_pos,    IMG_H, IMG_W);
@@ -164,6 +176,9 @@ p_pos    = reshape(p_pos,    IMG_H, IMG_W);
 beta_neg = reshape(beta_neg, IMG_H, IMG_W);
 t_neg    = reshape(t_neg,    IMG_H, IMG_W);
 p_neg    = reshape(p_neg,    IMG_H, IMG_W);
+beta_min = reshape(beta_min, IMG_H, IMG_W);
+t_min    = reshape(t_min,    IMG_H, IMG_W);
+p_min    = reshape(p_min,    IMG_H, IMG_W);
 
 %% ── 6.  Load body mask ────────────────────────────────────────────────────
 mask_path = 'mask.png';
@@ -191,13 +206,16 @@ fprintf('Pixels inside mask: %d / %d\n', n_in_mask, n_pix);
 %% ── 7.  FDR correction (Benjamini–Hochberg), restricted to in-mask pixels ─
 p_pos_fdr = nan(IMG_H, IMG_W);
 p_neg_fdr = nan(IMG_H, IMG_W);
+p_min_fdr = nan(IMG_H, IMG_W);
 p_pos_fdr(in_mask) = fdr_bh(p_pos(in_mask));
 p_neg_fdr(in_mask) = fdr_bh(p_neg(in_mask));
+p_min_fdr(in_mask) = fdr_bh(p_min(in_mask));
 
 %% ── 8.  Save ─────────────────────────────────────────────────────────────
 save('pixel_regression_results_subjectlevel.mat', ...
      'beta_pos','t_pos','p_pos','p_pos_fdr', ...
      'beta_neg','t_neg','p_neg','p_neg_fdr', ...
+     'beta_min','t_min','p_min','p_min_fdr', ...
      'subj_id','n_subj');
 fprintf('Results saved to pixel_regression_results_subjectlevel.mat\n');
 
@@ -207,23 +225,28 @@ cmap = make_hotcold(64);
 
 sig_pos = in_mask & (p_pos_fdr < alpha_thresh);
 sig_neg = in_mask & (p_neg_fdr < alpha_thresh);
+sig_min = in_mask & (p_min_fdr < alpha_thresh);
 
 figure('Name','Pixel Regression Results (Subject-level, Nostalgia only)', ...
-       'NumberTitle','off','Color','w','Position',[100 100 1200 800]);
+       'NumberTitle','off','Color','w','Position',[100 100 1400 900]);
 
-plot_body(subplot(2,3,1), beta_pos, in_mask, cmap, '\beta - Positive Feelings');
-plot_body(subplot(2,3,2), t_pos,    in_mask, cmap, 't-stat - Positive Feelings');
-plot_body_masked(subplot(2,3,3), beta_pos, in_mask, sig_pos, cmap, ...
+plot_body(subplot(3,3,1), beta_pos, in_mask, cmap, '\beta - Positive Feelings');
+plot_body(subplot(3,3,2), t_pos,    in_mask, cmap, 't-stat - Positive Feelings');
+plot_body_masked(subplot(3,3,3), beta_pos, in_mask, sig_pos, cmap, ...
                  sprintf('\\beta sig (FDR p<%.2f) - Positive', alpha_thresh));
 
-plot_body(subplot(2,3,4), beta_neg, in_mask, cmap, '\beta - Negative Feelings');
-plot_body(subplot(2,3,5), t_neg,    in_mask, cmap, 't-stat - Negative Feelings');
-plot_body_masked(subplot(2,3,6), beta_neg, in_mask, sig_neg, cmap, ...
+plot_body(subplot(3,3,4), beta_neg, in_mask, cmap, '\beta - Negative Feelings');
+plot_body(subplot(3,3,5), t_neg,    in_mask, cmap, 't-stat - Negative Feelings');
+plot_body_masked(subplot(3,3,6), beta_neg, in_mask, sig_neg, cmap, ...
                  sprintf('\\beta sig (FDR p<%.2f) - Negative', alpha_thresh));
+
+plot_body(subplot(3,3,7), beta_min, in_mask, cmap, '\beta - Min(Pos,Neg)');
+plot_body(subplot(3,3,8), t_min,    in_mask, cmap, 't-stat - Min(Pos,Neg)');
+plot_body_masked(subplot(3,3,9), beta_min, in_mask, sig_min, cmap, ...
+                 sprintf('\\beta sig (FDR p<%.2f) - Min(Pos,Neg)', alpha_thresh));
 
 sgtitle(sprintf('Bodily Sensation Pixel Regression (Subject-level, N=%d, Nostalgia only)', n_subj));
 
-pictures_dir = fullfile('pictures','regression');
 if ~exist(pictures_dir,'dir'), mkdir(pictures_dir); end
 saveas(gcf, fullfile(pictures_dir,'pixel_regression_maps_subjectlevel.png'));
 fprintf('Saved figure to %s\n', fullfile(pictures_dir,'pixel_regression_maps_subjectlevel.png'));
@@ -233,6 +256,8 @@ fprintf('  Positive: %d / %d significant (%.1f%%)\n', ...
         nnz(sig_pos), n_in_mask, 100*nnz(sig_pos)/n_in_mask);
 fprintf('  Negative: %d / %d significant (%.1f%%)\n', ...
         nnz(sig_neg), n_in_mask, 100*nnz(sig_neg)/n_in_mask);
+fprintf('  Min(Pos,Neg): %d / %d significant (%.1f%%)\n', ...
+        nnz(sig_min), n_in_mask, 100*nnz(sig_min)/n_in_mask);
 
 
 %% ═══════════════════════════════════════════════════════════════════════

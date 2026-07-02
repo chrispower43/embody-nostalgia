@@ -151,10 +151,15 @@ addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'helpers'));
         cfg.pic_pq0        = fullfile('pictures', [cfg.pic_prefix base_pq0]);
         cfg.pic_pq1and3    = fullfile('pictures', [cfg.pic_prefix base_pq1and3]);
         cfg.pic_regression = fullfile('pictures', [cfg.pic_prefix base_regression]);
+        cfg.pca_regression = fullfile('pictures', [cfg.pic_prefix 'pca_' base_regression]);
+        cfg.multi_regression = fullfile('pictures', [cfg.pic_prefix 'multi_' base_regression]);
     else
         cfg.pic_pq0        = fullfile('pictures', base_pq0);
         cfg.pic_pq1and3    = fullfile('pictures', base_pq1and3);
         cfg.pic_regression = fullfile('pictures', base_regression);
+        cfg.pca_regression = fullfile('pictures', ['pca_' base_regression]);
+        cfg.multi_regression = fullfile('pictures', ['multi_' base_regression]);
+        
     end
 end
 

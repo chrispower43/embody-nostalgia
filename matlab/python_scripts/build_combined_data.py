@@ -70,11 +70,6 @@ for country in COUNTRIES + ["all"]:
     subjects_by_country[country] = all_subject_ids
 processed_subjects = set(all_subject_ids)
 
-# Save the all-subjects list (mirrors the old all_subjects_list.csv)
-all_subjects_df = pd.DataFrame(
-    dict([(k, pd.Series(v)) for k, v in subjects_by_country.items()])
-)
-all_subjects_df.to_csv(PROJECT_ROOT / "all_subjects_list.csv", index=False)
 print(f"\nTotal unique processed subjects: {len(processed_subjects)}")
 
 
