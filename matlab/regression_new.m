@@ -228,21 +228,27 @@ sig_neg = in_mask & (p_neg_fdr < alpha_thresh);
 sig_min = in_mask & (p_min_fdr < alpha_thresh);
 
 figure('Name','Pixel Regression Results (Subject-level, Nostalgia only)', ...
-       'NumberTitle','off','Color','w','Position',[100 100 1400 900]);
+       'NumberTitle','off','Color','w','Position',[100 100 1800 900]);
 
-plot_body(subplot(3,3,1), beta_pos, in_mask, cmap, '\beta - Positive Feelings');
-plot_body(subplot(3,3,2), t_pos,    in_mask, cmap, 't-stat - Positive Feelings');
-plot_body_masked(subplot(3,3,3), beta_pos, in_mask, sig_pos, cmap, ...
+plot_body(subplot(3,4,1), beta_pos, in_mask, cmap, '\beta - Positive Feelings');
+plot_body(subplot(3,4,2), t_pos,    in_mask, cmap, 't-stat - Positive Feelings');
+plot_body_masked(subplot(3,4,3), t_pos, in_mask, sig_pos, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Positive', alpha_thresh));
+plot_body_masked(subplot(3,4,4), beta_pos, in_mask, sig_pos, cmap, ...
                  sprintf('\\beta sig (FDR p<%.2f) - Positive', alpha_thresh));
 
-plot_body(subplot(3,3,4), beta_neg, in_mask, cmap, '\beta - Negative Feelings');
-plot_body(subplot(3,3,5), t_neg,    in_mask, cmap, 't-stat - Negative Feelings');
-plot_body_masked(subplot(3,3,6), beta_neg, in_mask, sig_neg, cmap, ...
+plot_body(subplot(3,4,5), beta_neg, in_mask, cmap, '\beta - Negative Feelings');
+plot_body(subplot(3,4,6), t_neg,    in_mask, cmap, 't-stat - Negative Feelings');
+plot_body_masked(subplot(3,4,7), t_neg, in_mask, sig_neg, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Negative', alpha_thresh));
+plot_body_masked(subplot(3,4,8), beta_neg, in_mask, sig_neg, cmap, ...
                  sprintf('\\beta sig (FDR p<%.2f) - Negative', alpha_thresh));
 
-plot_body(subplot(3,3,7), beta_min, in_mask, cmap, '\beta - Min(Pos,Neg)');
-plot_body(subplot(3,3,8), t_min,    in_mask, cmap, 't-stat - Min(Pos,Neg)');
-plot_body_masked(subplot(3,3,9), beta_min, in_mask, sig_min, cmap, ...
+plot_body(subplot(3,4,9),  beta_min, in_mask, cmap, '\beta - Min(Pos,Neg)');
+plot_body(subplot(3,4,10), t_min,    in_mask, cmap, 't-stat - Min(Pos,Neg)');
+plot_body_masked(subplot(3,4,11), t_min, in_mask, sig_min, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Min(Pos,Neg)', alpha_thresh));
+plot_body_masked(subplot(3,4,12), beta_min, in_mask, sig_min, cmap, ...
                  sprintf('\\beta sig (FDR p<%.2f) - Min(Pos,Neg)', alpha_thresh));
 
 sgtitle(sprintf('Bodily Sensation Pixel Regression (Subject-level, N=%d, Nostalgia only)', n_subj));
@@ -303,6 +309,11 @@ function [beta1, tstat, pval] = ols_per_pixel(x, Y)
 
     tstat = beta1 ./ sqrt(var_b1);
     pval  = 2 * (1 - tcdf(abs(tstat), max(df,1)));
+    
+    dbg_pixel = ;   % change this to inspect a different pixel index
+    fprintf("pixel %d: |t| = %.4f, df = %d, tcdf(|t|,df) = %.4f, p = %.4f\n", ...
+            dbg_pixel, abs(tstat(dbg_pixel)), max(df,1), ...
+            tcdf(abs(tstat(dbg_pixel)), max(df,1)), pval(dbg_pixel));
 
     if df < 1
         tstat(:) = 0;
