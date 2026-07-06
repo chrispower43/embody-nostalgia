@@ -266,21 +266,27 @@ sig_neg = in_mask & (p_neg_fdr < alpha_thresh);
 sig_min = in_mask & (p_min_fdr < alpha_thresh);
 
 figure('Name','Pixel Multivariable Regression Results (Subject-level, Nostalgia only)', ...
-       'NumberTitle','off','Color','w','Position',[100 100 1400 900]);
+       'NumberTitle','off','Color','w','Position',[100 100 1800 900]);
 
-plot_body(subplot(3,3,1), beta_pos, in_mask, cmap, '\beta_{pos} (controlling for neg, min)');
-plot_body(subplot(3,3,2), t_pos,    in_mask, cmap, 't-stat - Positive | Negative, Min');
-plot_body_masked(subplot(3,3,3), beta_pos, in_mask, sig_pos, cmap, ...
+plot_body(subplot(3,4,1), beta_pos, in_mask, cmap, '\beta_{pos} (controlling for neg, min)');
+plot_body(subplot(3,4,2), t_pos,    in_mask, cmap, 't-stat - Positive | Negative, Min');
+plot_body_masked(subplot(3,4,3), t_pos, in_mask, sig_pos, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Positive', alpha_thresh));
+plot_body_masked(subplot(3,4,4), beta_pos, in_mask, sig_pos, cmap, ...
                  sprintf('\\beta_{pos} sig (FDR p<%.2f)', alpha_thresh));
 
-plot_body(subplot(3,3,4), beta_neg, in_mask, cmap, '\beta_{neg} (controlling for pos, min)');
-plot_body(subplot(3,3,5), t_neg,    in_mask, cmap, 't-stat - Negative | Positive, Min');
-plot_body_masked(subplot(3,3,6), beta_neg, in_mask, sig_neg, cmap, ...
+plot_body(subplot(3,4,5), beta_neg, in_mask, cmap, '\beta_{neg} (controlling for pos, min)');
+plot_body(subplot(3,4,6), t_neg,    in_mask, cmap, 't-stat - Negative | Positive, Min');
+plot_body_masked(subplot(3,4,7), t_neg, in_mask, sig_neg, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Negative', alpha_thresh));
+plot_body_masked(subplot(3,4,8), beta_neg, in_mask, sig_neg, cmap, ...
                  sprintf('\\beta_{neg} sig (FDR p<%.2f)', alpha_thresh));
 
-plot_body(subplot(3,3,7), beta_min, in_mask, cmap, '\beta_{min} (controlling for pos, neg)');
-plot_body(subplot(3,3,8), t_min,    in_mask, cmap, 't-stat - Min | Positive, Negative');
-plot_body_masked(subplot(3,3,9), beta_min, in_mask, sig_min, cmap, ...
+plot_body(subplot(3,4,9),  beta_min, in_mask, cmap, '\beta_{min} (controlling for pos, neg)');
+plot_body(subplot(3,4,10), t_min,    in_mask, cmap, 't-stat - Min | Positive, Negative');
+plot_body_masked(subplot(3,4,11), t_min, in_mask, sig_min, cmap, ...
+                 sprintf('t sig (FDR p<%.2f) - Min', alpha_thresh));
+plot_body_masked(subplot(3,4,12), beta_min, in_mask, sig_min, cmap, ...
                  sprintf('\\beta_{min} sig (FDR p<%.2f)', alpha_thresh));
 
 sgtitle(sprintf(['Multivariable Bodily Sensation Regression (pixel ~ pos + neg + min jointly), ' ...

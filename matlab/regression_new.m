@@ -309,11 +309,6 @@ function [beta1, tstat, pval] = ols_per_pixel(x, Y)
 
     tstat = beta1 ./ sqrt(var_b1);
     pval  = 2 * (1 - tcdf(abs(tstat), max(df,1)));
-    
-    dbg_pixel = ;   % change this to inspect a different pixel index
-    fprintf("pixel %d: |t| = %.4f, df = %d, tcdf(|t|,df) = %.4f, p = %.4f\n", ...
-            dbg_pixel, abs(tstat(dbg_pixel)), max(df,1), ...
-            tcdf(abs(tstat(dbg_pixel)), max(df,1)), pval(dbg_pixel));
 
     if df < 1
         tstat(:) = 0;
