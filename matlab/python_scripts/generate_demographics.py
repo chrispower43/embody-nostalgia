@@ -1,66 +1,59 @@
 """
 generate_demographics.py
 ─────────────────────────
-Builds the demographic breakdown table (Race × Gender, plus Hispanic/Latino
-counts) requested by IRB/journal reporting forms, for subjects included in
-subject_list_preprocessed.csv.
-
-Source columns (Prolific demographics, via combined_data_all.csv):
-    Sex                     -> Gender  (Male / Female / Nonbinary+intersex)
-    Ethnicity simplified    -> Race    (Prolific's "Ethnicity simplified"
-                                         field is actually a coarse RACE
-                                         category, not Hispanic/Latino
-                                         ethnicity — see NOTE below)
-
-NOTE on Hispanic/Latino origin
-───────────────────────────────
-The reporting form asks for a separate "Number of participants of Hispanic,
-Latino/a, or Spanish origin" row, cross-tabulated by gender. Our current data
-does NOT contain a Hispanic/Latino ethnicity field (only the race-like
-"Ethnicity simplified" column). This script therefore:
-    - always emits the Hispanic/Latino row, filled with 0s
-    - prints/logs a WARNING that this data was not found
-    - is written so that if a real Hispanic/Latino column becomes available
-      later (e.g. from a supplementary Prolific export), you only need to
-      set HISPANIC_COL below and the row will populate automatically.
-
-Race mapping
-─────────────
-Prolific's "Ethnicity simplified" values are mapped onto the form's race
-categories as follows. Prolific does not distinguish American Indian/Alaska
-Native or Native Hawaiian/Pacific Islander from its other buckets, so those
-rows will show 0 unless/until finer-grained data is available.
-
-    White               -> White
-    Black                -> Black or African American
-    Asian                -> Asian
-    Mixed                -> More than one race
-    Other                -> Other
-    Prefer not to say    -> Unknown
-    CONSENT_REVOKED       -> Unknown
-    DATA_EXPIRED          -> Unknown
-    (missing / NaN)       -> Unknown
-
-Gender mapping
-───────────────
-    Male                 -> Male
-    Female                -> Female
-    Prefer not to say    -> Nonbinary and/or intersex   [see WARNING below]
-    CONSENT_REVOKED       -> Nonbinary and/or intersex   [see WARNING below]
-    (missing / NaN)       -> Nonbinary and/or intersex   [see WARNING below]
-
-The form only offers three gender columns (Male / Female / Nonbinary and/or
-intersex), so anything that isn't cleanly Male/Female currently falls into
-the third column as a catch-all. This is flagged with a WARNING at runtime
-because "Prefer not to say" / "CONSENT_REVOKED" are not actually nonbinary
-identities — it's a limitation of the form's fixed columns, not a claim
-about those participants. Revisit if the form/collection changes.
+Builds a per-country demographic summary (Gender breakdown, Race breakdown,
+Age mean/SD, and a Consent Revoked count), run separately for the
+preprocessed (paired) subject group and the unfiltered subject group.
 
 Output
 ───────
-Writes demographics_table.csv (Race x Gender counts + Hispanic/Latino row)
-to PROJECT_ROOT, for the overall sample and, separately, one file per
-country (demographics_table_<COUNTRY>.csv), since this is a 5-country study.
+One CSV per cohort, written directly into PROJECT_ROOT/demographics/:
+
+    demographics/demographics_preprocessed.csv
+    demographics/demographics_unfiltered.csv
+
+Columns are countries (plus a "Total" column). Rows are:
+    Male / Female / Nonbinary and/or intersex   (gender breakdown)
+    White / Black or African American / Asian / More than one race / Other
+                                                  (race breakdown)
+    Age, Mean (SD)
+    Consent Revoked                              (count excluded from
+                                                   everything above)
+
+Gender and race are NOT cross-tabulated against each other — each is a
+simple per-country breakdown, independent of the other.
+
+Source columns (Prolific demographics, via combined_data_all.csv):
+    Sex                     -> Gender
+    Ethnicity simplified    -> Race   (Prolific's "Ethnicity simplified"
+                                        field is actually a coarse RACE
+                                        category, not Hispanic/Latino
+                                        ethnicity)
+    Age                      -> Age
+
+Consent Revoked handling
+──────────────────────────
+A subject is treated as "Consent Revoked" if their Sex OR Ethnicity
+simplified value is literally "CONSENT_REVOKED". Those subjects are
+excluded from the Gender rows, Race rows, and the Age mean/SD, and are
+instead counted once in the dedicated "Consent Revoked" row.
+
+Unmapped / unexpected values
+──────────────────────────────
+Only Male/Female (gender) and White/Black/Mixed/Asian/Other (race) are
+currently mapped to output rows (Prolific's raw "Black"/"Mixed" values map
+to "Black or African American"/"More than one race" respectively). Any
+other raw value (e.g. "Prefer not to say", "DATA_EXPIRED", or anything
+new/unexpected) does NOT get silently bucketed anywhere — instead, the
+subject's ID and the offending raw value are printed to the console so the
+mapping can be extended deliberately, and that subject is excluded from the
+relevant row's count (gender, race, or age) until the code is updated.
+
+NOTE on Hispanic/Latino origin
+───────────────────────────────
+Our current data does not contain a Hispanic/Latino ethnicity field
+(only the race-like "Ethnicity simplified" column), so no such row is
+produced. Revisit if/when that data becomes available.
 
 Usage:
     python generate_demographics.py
@@ -97,163 +90,162 @@ cfg = load_config(PROJECT_ROOT / "config" / "config.toml")
 
 SUBJECTS_DIR = cfg.subjects_dir
 COMBINED_CSV = cfg.combined_csv
-SUBJECT_LIST = SUBJECTS_DIR / "subject_list_preprocessed.csv"
 
 print(f"[DEBUG] SUBJECTS_DIR = {SUBJECTS_DIR}")
 print(f"[DEBUG] COMBINED_CSV = {COMBINED_CSV}")
-print(f"[DEBUG] SUBJECT_LIST = {SUBJECT_LIST}")
 
 # ── Column names / mappings ────────────────────────────────────────────────────
 SEX_COL = "Sex"
 RACE_COL = "Ethnicity simplified"   # Prolific's field name; it's actually race
-# Set this to a real column name if/when Hispanic/Latino origin data becomes
-# available (e.g. "Hispanic/Latino"). Left as None for now — see module
-# docstring NOTE above.
-HISPANIC_COL = None
+AGE_COL = "Age"
 
-GENDER_CATEGORIES = ["Male", "Female", "Nonbinary and/or intersex"]
+CONSENT_REVOKED_VALUE = "CONSENT_REVOKED"
 
+GENDER_ROWS = ["Male", "Female", "Nonbinary and/or intersex"]
 GENDER_MAP = {
     "Male": "Male",
     "Female": "Female",
-}  # anything else falls through to the nonbinary/intersex catch-all column
+    "Nonbinary and/or intersex": "Nonbinary and/or intersex",
+}
 
-RACE_CATEGORIES = [
-    "American Indian or Alaska Native",
-    "Asian",
-    "Black or African American",
-    "Native Hawaiian or Pacific Islander",
-    "White",
-    "More than one race",
-    "Unknown",
-    "Other",
-]
-
+RACE_ROWS = ["White", "Black or African American", "Asian", "More than one race", "Other"]
 RACE_MAP = {
     "White": "White",
     "Black": "Black or African American",
     "Asian": "Asian",
     "Mixed": "More than one race",
     "Other": "Other",
-    "Prefer not to say": "Unknown",
-    "CONSENT_REVOKED": "Unknown",
-    "DATA_EXPIRED": "Unknown",
 }
 
+AGE_ROW_LABEL = "Age, Mean (SD)"
+CONSENT_REVOKED_ROW_LABEL = "Consent Revoked"
 
-def map_gender(raw: str) -> str:
-    if pd.isna(raw):
-        return "Nonbinary and/or intersex"
-    return GENDER_MAP.get(raw.strip(), "Nonbinary and/or intersex")
-
-
-def map_race(raw: str) -> str:
-    if pd.isna(raw):
-        return "Unknown"
-    return RACE_MAP.get(raw.strip(), "Other")
+ROW_ORDER = GENDER_ROWS + RACE_ROWS + [AGE_ROW_LABEL, CONSENT_REVOKED_ROW_LABEL]
 
 
-def build_demographics_table(sub_df: pd.DataFrame, label: str) -> pd.DataFrame:
-    """Build the Race x Gender count table (+ Hispanic/Latino row) for sub_df."""
-    n = len(sub_df)
-    print(f"\n[DEBUG] Building demographics table for '{label}' (n={n})")
+def flag_unmapped(subject_id: str, field_name: str, raw_value) -> None:
+    print(f"[FLAG] Subject '{subject_id}': {field_name} = {raw_value!r} does not map "
+          f"to a known category and was excluded from that row. Update the mapping "
+          f"in generate_demographics.py if this value should be accommodated.")
 
-    genders = sub_df[SEX_COL].apply(map_gender)
-    races = sub_df[RACE_COL].apply(map_race)
 
-    n_nonbinary_bucket = int((genders == "Nonbinary and/or intersex").sum())
-    if n_nonbinary_bucket:
-        print(f"[DEBUG] {n_nonbinary_bucket} subject(s) in '{label}' fell into the "
-              f"'Nonbinary and/or intersex' column because their Sex value wasn't "
-              f"'Male'/'Female' (includes missing, 'Prefer not to say', "
-              f"'CONSENT_REVOKED'). See module docstring WARNING.")
+def build_country_column(df: pd.DataFrame, label: str) -> pd.Series:
+    """Build one column (Series indexed by ROW_ORDER) of counts/stats for df."""
+    is_consent_revoked = (df[SEX_COL] == CONSENT_REVOKED_VALUE) | (df[RACE_COL] == CONSENT_REVOKED_VALUE)
+    n_consent_revoked = int(is_consent_revoked.sum())
 
-    n_unknown_race = int((races == "Unknown").sum())
-    if n_unknown_race:
-        print(f"[DEBUG] {n_unknown_race} subject(s) in '{label}' mapped to race "
-              f"'Unknown' (missing, 'Prefer not to say', 'CONSENT_REVOKED', or "
-              f"'DATA_EXPIRED').")
+    counts = {row: 0 for row in ROW_ORDER}
+    counts[CONSENT_REVOKED_ROW_LABEL] = n_consent_revoked
 
-    # Race x Gender counts
-    table = pd.DataFrame(0, index=RACE_CATEGORIES, columns=GENDER_CATEGORIES)
-    for race, gender in zip(races, genders):
-        table.loc[race, gender] += 1
+    remaining = df[~is_consent_revoked]
 
-    # Hispanic/Latino row (placeholder unless HISPANIC_COL is set)
-    hispanic_row = pd.Series(0, index=GENDER_CATEGORIES, name="Hispanic, Latino/a, or Spanish origin")
-    if HISPANIC_COL is not None and HISPANIC_COL in sub_df.columns:
-        is_hispanic = sub_df[HISPANIC_COL].astype(str).str.strip().str.lower().isin(
-            ["yes", "true", "1", "hispanic", "latino", "latina", "latinx"]
-        )
-        for gender, is_h in zip(genders, is_hispanic):
-            if is_h:
-                hispanic_row[gender] += 1
+    # Gender breakdown
+    for _, row in remaining.iterrows():
+        raw = row[SEX_COL]
+        if pd.isna(raw):
+            flag_unmapped(row["ID"], SEX_COL, raw)
+            continue
+        mapped = GENDER_MAP.get(raw.strip())
+        if mapped is None:
+            flag_unmapped(row["ID"], SEX_COL, raw)
+            continue
+        counts[mapped] += 1
+
+    # Race breakdown
+    for _, row in remaining.iterrows():
+        raw = row[RACE_COL]
+        if pd.isna(raw):
+            flag_unmapped(row["ID"], RACE_COL, raw)
+            continue
+        mapped = RACE_MAP.get(raw.strip())
+        if mapped is None:
+            flag_unmapped(row["ID"], RACE_COL, raw)
+            continue
+        counts[mapped] += 1
+
+    # Age mean (SD)
+    ages = pd.to_numeric(remaining[AGE_COL], errors="coerce")
+    for subj_id, raw_age, parsed_age in zip(remaining["ID"], remaining[AGE_COL], ages):
+        if pd.isna(parsed_age) and not pd.isna(raw_age):
+            flag_unmapped(subj_id, AGE_COL, raw_age)
+    if ages.notna().sum() > 0:
+        age_mean = ages.mean()
+        age_sd = ages.std(ddof=1) if ages.notna().sum() > 1 else float("nan")
+        counts[AGE_ROW_LABEL] = f"{age_mean:.1f} ({age_sd:.1f})"
     else:
-        print(f"[WARNING] Ethnicity data not found: no Hispanic/Latino/Spanish-origin "
-              f"column is available in the current data (HISPANIC_COL is unset). "
-              f"The 'Hispanic, Latino/a, or Spanish origin' row for '{label}' is "
-              f"being reported as all zeros as a placeholder. Set HISPANIC_COL at "
-              f"the top of this script once that data is collected.")
+        counts[AGE_ROW_LABEL] = "n/a"
 
-    table = pd.concat([hispanic_row.to_frame().T, table])
+    print(f"[DEBUG] '{label}' — n={len(df)}, consent revoked={n_consent_revoked}, "
+          f"gender total={sum(counts[r] for r in GENDER_ROWS)}, "
+          f"race total={sum(counts[r] for r in RACE_ROWS)}")
+
+    return pd.Series(counts, index=ROW_ORDER, name=label)
+
+
+def run_demographics_for_list(subject_list_path: Path, label: str, out_path: Path) -> None:
+    """Filter combined data to subject_list_path's IDs, build the per-country
+    summary table, and write it to out_path."""
+    print("\n" + "=" * 75)
+    print(f"  Running demographics for '{label}' group")
+    print(f"  Subject list: {subject_list_path}")
+    print("=" * 75)
+
+    if not subject_list_path.exists():
+        print(f"[WARNING] Subject list not found: {subject_list_path}. Skipping '{label}'.")
+        return
+
+    subj_df = pd.read_csv(subject_list_path)
+    included_subjects = set(subj_df["subject"].astype(str).str.strip())
+    print(f"  {len(included_subjects)} '{label}' subjects listed.")
+
+    df = df_raw[df_raw["ID"].isin(included_subjects)].copy()
+    n_dropped = len(df_raw) - len(df)
+    print(f"\n  Rows in combined CSV       : {len(df_raw)}")
+    print(f"  Rows matching '{label}' list: {len(df)}")
+    print(f"  Rows dropped (not in list) : {n_dropped}")
+
+    missing_from_csv = included_subjects - set(df_raw["ID"])
+    if missing_from_csv:
+        print(f"[DEBUG] {len(missing_from_csv)} subject(s) in '{label}' list but NOT "
+              f"found in combined CSV; they are excluded from the demographics table.")
+
+    if "country" not in df.columns:
+        print(f"[WARNING] No 'country' column found; cannot build per-country table for '{label}'.")
+        return
+
+    columns = []
+    for country in sorted(df["country"].dropna().unique()):
+        country_df = df[df["country"] == country]
+        columns.append(build_country_column(country_df, country))
+    columns.append(build_country_column(df, "Total"))
+
+    table = pd.concat(columns, axis=1)
     table.index.name = "Category"
-    table.insert(0, "n_total", table[GENDER_CATEGORIES].sum(axis=1))
+    table.to_csv(out_path)
+    print(f"\n[DEBUG] '{label}' demographics table:\n{table.to_string()}")
+    print(f"'{label}' table written to {out_path}")
 
-    return table
-
-
-# ── Load subject list ──────────────────────────────────────────────────────────
-print(f"\nLoading subject list: {SUBJECT_LIST}")
-subj_df = pd.read_csv(SUBJECT_LIST)
-included_subjects = set(subj_df["subject"].astype(str).str.strip())
-print(f"  {len(included_subjects)} preprocessed subjects listed.")
-print(f"[DEBUG] Subjects per country:\n{subj_df['country'].value_counts().to_string()}")
-
-# ── Load combined data ─────────────────────────────────────────────────────────
-print(f"\nLoading combined data: {COMBINED_CSV}")
-df_raw = pd.read_csv(COMBINED_CSV, dtype=str)
-print(f"[DEBUG] combined_data_all.csv shape (raw): {df_raw.shape}")
-
-for required_col in (SEX_COL, RACE_COL):
-    if required_col not in df_raw.columns:
-        raise KeyError(f"Expected column '{required_col}' not found in {COMBINED_CSV}")
-
-df = df_raw.copy()
-df["ID"] = df["ID"].astype(str).str.strip()
-
-df_all = df.copy()
-df = df[df["ID"].isin(included_subjects)].copy()
-n_dropped = len(df_all) - len(df)
-print(f"\n  Rows in combined CSV           : {len(df_all)}")
-print(f"  Rows matching preprocessed list: {len(df)}")
-print(f"  Rows dropped (not in list)     : {n_dropped}")
-
-missing_from_csv = included_subjects - set(df_all["ID"])
-if missing_from_csv:
-    print(f"[DEBUG] {len(missing_from_csv)} subject(s) in preprocessed list but NOT "
-          f"found in combined CSV; they are excluded from the demographics table.")
 
 # ── Output folder ────────────────────────────────────────────────────────────────
 OUTPUT_DIR = PROJECT_ROOT / "demographics"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 print(f"[DEBUG] OUTPUT_DIR = {OUTPUT_DIR}")
 
-# ── Overall table ───────────────────────────────────────────────────────────────
-overall_table = build_demographics_table(df, "overall")
-out_path = OUTPUT_DIR / "demographics_table.csv"
-overall_table.to_csv(out_path)
-print(f"\n[DEBUG] Overall demographics table:\n{overall_table.to_string()}")
-print(f"Overall table written to {out_path}")
+# ── Load combined data (once — shared across both subject lists) ──────────────
+print(f"\nLoading combined data: {COMBINED_CSV}")
+df_raw = pd.read_csv(COMBINED_CSV, dtype=str)
+print(f"[DEBUG] combined_data_all.csv shape (raw): {df_raw.shape}")
 
-# ── Per-country tables ───────────────────────────────────────────────────────────
-if "country" in df.columns:
-    for country in sorted(df["country"].dropna().unique()):
-        country_df = df[df["country"] == country]
-        country_table = build_demographics_table(country_df, country)
-        country_out_path = OUTPUT_DIR / f"demographics_table_{country}.csv"
-        country_table.to_csv(country_out_path)
-        print(f"[DEBUG] {country} table written to {country_out_path}")
-else:
-    print("[WARNING] No 'country' column found; skipping per-country breakdown.")
+for required_col in (SEX_COL, RACE_COL, AGE_COL):
+    if required_col not in df_raw.columns:
+        raise KeyError(f"Expected column '{required_col}' not found in {COMBINED_CSV}")
+
+df_raw["ID"] = df_raw["ID"].astype(str).str.strip()
+
+SUBJECT_LIST_PREPROCESSED = SUBJECTS_DIR / "subject_list_preprocessed.csv"
+SUBJECT_LIST_UNFILTERED = SUBJECTS_DIR / "subject_list_unfiltered.csv"
+
+run_demographics_for_list(SUBJECT_LIST_PREPROCESSED, "preprocessed", OUTPUT_DIR / "demographics_preprocessed.csv")
+run_demographics_for_list(SUBJECT_LIST_UNFILTERED, "unfiltered", OUTPUT_DIR / "demographics_unfiltered.csv")
 
 print("\nDone.")
