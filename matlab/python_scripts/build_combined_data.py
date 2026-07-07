@@ -6,7 +6,8 @@ Builds combined_data_all.csv by:
   2. Filtering each country's Qualtrics CSV to only those subjects
   3. Merging in demographic data from Prolific CSVs
   4. Cleaning / reshaping rating columns
-  5. Writing combined_data_all.csv to the project root
+  5. Computing SNS, BMRQ, and SES composite scores
+  6. Writing combined_data_all.csv to the project root
 
 Expected folder layout (relative to this script / the MATLAB project root):
   qualtrics_data/
@@ -74,6 +75,18 @@ print(f"\nTotal unique processed subjects: {len(processed_subjects)}")
 
 
 # ── Step 2: column definitions ───────────────────────────────────────────────
+
+# SNS (Southampton Nostalgia Scale): 6 numeric items + 1 frequency item (Q478)
+SNS_NUMERIC_COLS = ["Q472_1", "Q472_2", "Q472_3", "Q472_4", "Q472_5", "Q472_6"]
+SNS_FREQ_COL = "Q478"
+
+# BMRQ (Barcelona Music Reward Questionnaire): 20 items, 1-5 scale
+BMRQ_COLS = [f"BMRQ_{i}" for i in range(1, 21)]
+
+# SES (subjective socioeconomic status): two 10-rung on/off ladders
+SES_COUNTRY_COLS   = [f"SES1_{i}" for i in range(1, 11)]
+SES_COMMUNITY_COLS = [f"SES2_{i}" for i in range(1, 11)]
+
 COLUMNS_TO_KEEP = [
     "ResponseId", "PROLIFIC_PID",
     # Nostalgia songs
@@ -92,6 +105,10 @@ COLUMNS_TO_KEEP = [
     "C4_pos_10", "C4_neg_10", "C4_act_10", "C4_deact_10", "C4_enjoy",
     # Metadata
     "FL_10_DO", "Duration (in seconds)",
+    # SNS / BMRQ / SES
+    *SNS_NUMERIC_COLS, SNS_FREQ_COL,
+    *BMRQ_COLS,
+    *SES_COUNTRY_COLS, *SES_COMMUNITY_COLS,
 ]
 
 RENAME_MAP = {
@@ -122,6 +139,14 @@ RENAME_MAP = {
     "C4_act_10": "C4_act", "C4_deact_10": "C4_deact", "C4_enjoy": "C4_enjoy",
     "FL_10_DO": "FL_10_DO",
     "Duration (in seconds)": "Duration",
+    # SNS / BMRQ / SES columns are already named the way we want; identity
+    # entries aren't strictly required for .rename() but are listed here for
+    # clarity/completeness.
+    **{c: c for c in SNS_NUMERIC_COLS},
+    SNS_FREQ_COL: SNS_FREQ_COL,
+    **{c: c for c in BMRQ_COLS},
+    **{c: c for c in SES_COUNTRY_COLS},
+    **{c: c for c in SES_COMMUNITY_COLS},
 }
 
 FL_DO_REPLACEMENTS = {
@@ -163,6 +188,80 @@ for country in COUNTRIES:
     else:
         print(f"  Warning: '{path}' not found — demographics will be missing for {country}")
         prolific_data[country] = pd.DataFrame()
+
+
+# ── SNS (Southampton Nostalgia Scale) ────────────────────────────────────────
+# 7 items total, each conceptually on a 1-7 scale:
+#   - Q472_1 .. Q472_6 are plain numeric ratings.
+#   - Q478 ("Specifically, how often do you bring to mind nostalgic
+#     experiences?") is collected as a text frequency response rather than a
+#     numeric rating. This is the item that gets reverse coded; the mapping
+#     below encodes the FINAL (post-reverse-code) 1-7 score directly, so no
+#     further reversal is needed once this map is applied.
+SNS_Q478_MAP = {
+    "At least once a day": 7,
+    "Three to four times a week": 6,
+    "Approximately twice a week": 5,
+    "Approximately once a week": 4,
+    "Once or twice a month": 3,
+    "Once every couple of months": 2,
+    "Once or twice a year": 1,
+}
+
+
+def compute_sns_score(row):
+    """Average of the 6 numeric SNS items + the reverse-coded Q478 item."""
+    vals = []
+    for col in SNS_NUMERIC_COLS:
+        v = extract_numeric_value(row.get(col))
+        if not pd.isna(v):
+            vals.append(v)
+
+    raw_freq = row.get(SNS_FREQ_COL)
+    if pd.notna(raw_freq):
+        mapped = SNS_Q478_MAP.get(str(raw_freq).strip())
+        if mapped is not None:
+            vals.append(mapped)
+
+    if not vals:
+        return np.nan
+    return float(np.mean(vals))
+
+
+# ── BMRQ (Barcelona Music Reward Questionnaire) ──────────────────────────────
+# 20 items, 1-5 scale. Items 2 and 5 are reverse coded (reverse = 6 - x on a
+# 1-5 scale). Final score is the SUM of all 20 items (not an average).
+BMRQ_REVERSE_ITEMS = {2, 5}
+
+
+def compute_bmrq_score(row):
+    total = 0.0
+    n_found = 0
+    for i in range(1, 21):
+        v = extract_numeric_value(row.get(f"BMRQ_{i}"))
+        if pd.isna(v):
+            continue
+        if i in BMRQ_REVERSE_ITEMS:
+            v = 6 - v
+        total += v
+        n_found += 1
+    if n_found == 0:
+        return np.nan
+    return total
+
+
+# ── SES (subjective socioeconomic status ladders) ────────────────────────────
+# Each ladder is stored as 10 On/Off columns (one per rung). The rung the
+# participant clicked is "On"; every other rung is "Off". The score is simply
+# the rung number (1-10). If every rung is "Off" for a subject, that's a data
+# issue worth flagging rather than silently coding as missing.
+def compute_ses_score(row, cols, subject_id, ladder_name):
+    for rung, col in enumerate(cols, start=1):
+        val = row.get(col)
+        if isinstance(val, str) and val.strip().lower() == "on":
+            return rung, False
+    print(f"  [FLAG] {ladder_name} ladder is all-OFF for subject {subject_id} — no rung selected")
+    return np.nan, True
 
 
 # ── Step 4: process each country's Qualtrics CSV ─────────────────────────────
@@ -246,6 +345,46 @@ for country in COUNTRIES:
             has_data  = df_sub[existing_data[0]].notna().sum() if existing_data else 0
             print(f"    Control {cn}: {has_nost} with nost<5, {has_data} with trial data")
 
+        # ── Compute SNS / BMRQ / SES scores ────────────────────────────────────
+        print("  Computing SNS, BMRQ, and SES scores...")
+
+        id_col = df_sub["ID"] if "ID" in df_sub.columns else pd.Series([None] * len(df_sub))
+
+        if any(c in df_sub.columns for c in SNS_NUMERIC_COLS + [SNS_FREQ_COL]):
+            df_sub["SNS_score"] = df_sub.apply(compute_sns_score, axis=1)
+            n_sns = df_sub["SNS_score"].notna().sum()
+            print(f"    SNS: {n_sns}/{len(df_sub)} subjects scored")
+            df_sub.drop(columns=[c for c in SNS_NUMERIC_COLS + [SNS_FREQ_COL] if c in df_sub.columns],
+                         inplace=True)
+
+        if any(c in df_sub.columns for c in BMRQ_COLS):
+            df_sub["BMRQ_score"] = df_sub.apply(compute_bmrq_score, axis=1)
+            n_bmrq = df_sub["BMRQ_score"].notna().sum()
+            print(f"    BMRQ: {n_bmrq}/{len(df_sub)} subjects scored")
+            df_sub.drop(columns=[c for c in BMRQ_COLS if c in df_sub.columns], inplace=True)
+
+        if any(c in df_sub.columns for c in SES_COUNTRY_COLS):
+            ses_country = df_sub.apply(
+                lambda row: compute_ses_score(row, SES_COUNTRY_COLS, id_col.loc[row.name], "SES country"),
+                axis=1,
+            )
+            df_sub["SES_country_score"] = ses_country.apply(lambda x: x[0])
+            df_sub["SES_country_flag"]  = ses_country.apply(lambda x: x[1])
+            n_flagged_country = df_sub["SES_country_flag"].sum()
+            print(f"    SES (country ladder): {n_flagged_country} flagged all-OFF")
+            df_sub.drop(columns=[c for c in SES_COUNTRY_COLS if c in df_sub.columns], inplace=True)
+
+        if any(c in df_sub.columns for c in SES_COMMUNITY_COLS):
+            ses_community = df_sub.apply(
+                lambda row: compute_ses_score(row, SES_COMMUNITY_COLS, id_col.loc[row.name], "SES community"),
+                axis=1,
+            )
+            df_sub["SES_community_score"] = ses_community.apply(lambda x: x[0])
+            df_sub["SES_community_flag"]  = ses_community.apply(lambda x: x[1])
+            n_flagged_community = df_sub["SES_community_flag"].sum()
+            print(f"    SES (community ladder): {n_flagged_community} flagged all-OFF")
+            df_sub.drop(columns=[c for c in SES_COMMUNITY_COLS if c in df_sub.columns], inplace=True)
+
         df_sub["country"] = country
 
         # ── Merge Prolific demographics ───────────────────────────────────────
@@ -294,6 +433,11 @@ else:
         col_order += [f"N{i}_{m}" for m in ("nost", "pos", "neg", "act", "deact", "enjoy")]
     for i in range(1, 5):
         col_order += [f"C{i}_{m}" for m in ("nost", "pos", "neg", "act", "deact", "enjoy")]
+    col_order += [
+        "SNS_score", "BMRQ_score",
+        "SES_country_score", "SES_country_flag",
+        "SES_community_score", "SES_community_flag",
+    ]
     # Append any remaining columns (e.g. Prolific demographics) not yet listed
     col_order += [c for c in combined_df.columns if c not in col_order]
 
@@ -312,6 +456,25 @@ else:
             has_data = combined_df[pc].notna().sum() if pc in combined_df.columns else "N/A"
             total    = len(combined_df)
             print(f"  Control {cn}: {has_nost}/{total} have nost<5,  {has_data}/{total} have trial data")
+
+    # ── SNS / BMRQ / SES summary ───────────────────────────────────────────────
+    print("\n" + "=" * 55)
+    print("SNS / BMRQ / SES SUMMARY")
+    print("=" * 55)
+    if "SNS_score" in combined_df.columns:
+        print(f"  SNS_score: {combined_df['SNS_score'].notna().sum()}/{len(combined_df)} scored, "
+              f"mean={combined_df['SNS_score'].mean():.2f}")
+    if "BMRQ_score" in combined_df.columns:
+        print(f"  BMRQ_score: {combined_df['BMRQ_score'].notna().sum()}/{len(combined_df)} scored, "
+              f"mean={combined_df['BMRQ_score'].mean():.2f}")
+    if "SES_country_flag" in combined_df.columns:
+        n_flag = combined_df["SES_country_flag"].sum()
+        print(f"  SES_country_score: {combined_df['SES_country_score'].notna().sum()}/{len(combined_df)} scored, "
+              f"{n_flag} flagged all-OFF")
+    if "SES_community_flag" in combined_df.columns:
+        n_flag = combined_df["SES_community_flag"].sum()
+        print(f"  SES_community_score: {combined_df['SES_community_score'].notna().sum()}/{len(combined_df)} scored, "
+              f"{n_flag} flagged all-OFF")
 
     print("\n" + "=" * 55)
     print("SUMMARY")
