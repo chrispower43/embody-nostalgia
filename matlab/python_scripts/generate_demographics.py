@@ -13,9 +13,10 @@ One CSV per cohort, written directly into PROJECT_ROOT/demographics/:
     demographics/demographics_unfiltered.csv
 
 Columns are countries (plus a "Total" column). Rows are:
-    Male / Female / Nonbinary and/or intersex   (gender breakdown)
-    White / Black or African American / Asian / More than one race / Other
-                                                  (race breakdown)
+    Male / Female / Nonbinary and/or intersex / Prefer not to say
+                                                  (gender breakdown)
+    White / Black or African American / Asian / More than one race / Other /
+    Prefer not to say / Data Expired              (race breakdown)
     Age, Mean (SD)
     Consent Revoked                              (count excluded from
                                                    everything above)
@@ -40,14 +41,15 @@ instead counted once in the dedicated "Consent Revoked" row.
 
 Unmapped / unexpected values
 ──────────────────────────────
-Only Male/Female (gender) and White/Black/Mixed/Asian/Other (race) are
-currently mapped to output rows (Prolific's raw "Black"/"Mixed" values map
-to "Black or African American"/"More than one race" respectively). Any
-other raw value (e.g. "Prefer not to say", "DATA_EXPIRED", or anything
-new/unexpected) does NOT get silently bucketed anywhere — instead, the
-subject's ID and the offending raw value are printed to the console so the
-mapping can be extended deliberately, and that subject is excluded from the
-relevant row's count (gender, race, or age) until the code is updated.
+Male/Female/Nonbinary and/or intersex/Prefer not to say (gender) and
+White/Black/Mixed/Asian/Other/Prefer not to say/DATA_EXPIRED (race) are
+mapped to output rows (Prolific's raw "Black"/"Mixed" values map to
+"Black or African American"/"More than one race" respectively). Any other
+raw value (anything new/unexpected) does NOT get silently bucketed
+anywhere — instead, the subject's ID and the offending raw value are
+printed to the console so the mapping can be extended deliberately, and
+that subject is excluded from the relevant row's count (gender, race, or
+age) until the code is updated.
 
 NOTE on Hispanic/Latino origin
 ───────────────────────────────
@@ -101,20 +103,44 @@ AGE_COL = "Age"
 
 CONSENT_REVOKED_VALUE = "CONSENT_REVOKED"
 
-GENDER_ROWS = ["Male", "Female", "Nonbinary and/or intersex"]
+# NOTE: Gender and race each have their own "Prefer not to say" option, but they
+# are DIFFERENT survey questions (Sex vs. Ethnicity simplified). Previously both
+# used the identical string "Prefer not to say" as their row/dict key, which is
+# a genuine bug: ROW_ORDER = GENDER_ROWS + RACE_ROWS was used to build a single
+# `counts` dict via `{row: 0 for row in ROW_ORDER}`, and since a dict cannot hold
+# two entries with the same key, the gender-PNTS and race-PNTS counts silently
+# accumulated into ONE shared slot. That shared slot was then included in BOTH
+# `sum(counts[r] for r in GENDER_ROWS)` and `sum(counts[r] for r in RACE_ROWS)`,
+# inflating both totals by however many subjects had Sex == "Prefer not to say"
+# or Race == "Prefer not to say" (or both). This is why gender_total and
+# race_total could disagree, or even both come out too high, whenever a cohort
+# contained a "Prefer not to say" value on either field.
+#
+# Fix: use distinct internal keys for the two "Prefer not to say" rows so they
+# never share a dict slot. The printed/CSV row label still says "Prefer not to
+# say" for both, but a "(Gender)" / "(Race)" suffix distinguishes them so it's
+# clear at a glance which question each row is summarizing.
+GENDER_PNTS_LABEL = "Prefer not to say (Gender)"
+RACE_PNTS_LABEL = "Prefer not to say (Race)"
+
+GENDER_ROWS = ["Male", "Female", "Nonbinary and/or intersex", GENDER_PNTS_LABEL]
 GENDER_MAP = {
     "Male": "Male",
     "Female": "Female",
     "Nonbinary and/or intersex": "Nonbinary and/or intersex",
+    "Prefer not to say": GENDER_PNTS_LABEL,
 }
 
-RACE_ROWS = ["White", "Black or African American", "Asian", "More than one race", "Other"]
+RACE_ROWS = ["White", "Black or African American", "Asian", "More than one race", "Other",
+             RACE_PNTS_LABEL, "Data Expired"]
 RACE_MAP = {
     "White": "White",
     "Black": "Black or African American",
     "Asian": "Asian",
     "Mixed": "More than one race",
     "Other": "Other",
+    "Prefer not to say": RACE_PNTS_LABEL,
+    "DATA_EXPIRED": "Data Expired",
 }
 
 AGE_ROW_LABEL = "Age, Mean (SD)"
