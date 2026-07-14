@@ -131,7 +131,7 @@ function r = compute_country_stats(preprocessed_dir, country_name, mask, in_mask
     % forced to exactly 0, landing them in the colormap's black zero-band
     % regardless of the shared color axis used later.
     tvals_sig = tvals_full;
-    tvals_sig(abs(tvals_sig) < tID) = 0;
+    tvals_sig(tvals_sig < tID) = 0;
 
     avg_diff = mean(data(:,:,2),2) - mean(data(:,:,1),2);
     diff_img = zeros(size(mask));
