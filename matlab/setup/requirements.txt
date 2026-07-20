@@ -1,0 +1,9 @@
+# Embody Nostalgia — pinned Python dependencies
+# Installed into a project-local .venv by setup_env.sh / setup_env.bat
+# (or automatically by setup_python_env.m on first run).
+#
+# tomllib is stdlib in Python 3.11+, so tomli is only needed below that.
+tomli==2.0.1; python_version < "3.11"
+numpy==1.26.4
+pandas==2.2.3
+scipy==1.13.1

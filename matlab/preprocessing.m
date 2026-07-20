@@ -9,12 +9,35 @@ cfg      = read_config();
 countries = cfg.countries_all;
 subjects  = [cfg.subjects_dir '/'];
 
-%% === Set up Python environment ===
+%% === Verify Python environment ===
+% setup_python_env() is responsible for binding MATLAB's pyenv to the
+% project's .venv (this can only be done once per MATLAB session, before
+% any py.* call, which is why it isn't done here — preprocessing.m may
+% be run multiple times in one session). This block just checks that it
+% was actually run, and sets up the path/env bits that are safe to redo
+% on every call.
+project_root = fileparts(mfilename('fullpath'));
+
+if ispc
+    expected_python = fullfile(project_root, '.venv', 'Scripts', 'python.exe');
+else
+    expected_python = fullfile(project_root, '.venv', 'bin', 'python');
+end
+
+current_env = pyenv;
+if ~strcmpi(current_env.Executable, expected_python)
+    error('preprocessing:pythonEnvNotSet', ...
+        ['MATLAB is not using the project virtual environment.\n' ...
+         'Run setup_python_env() once at the start of this MATLAB session, ' ...
+         'then re-run preprocessing.\n  Expected: %s\n  Actual:   %s'], ...
+        expected_python, current_env.Executable);
+end
+fprintf('Using Python: %s (%s)\n', current_env.Executable, current_env.Version);
+
 % Pass project root to Python scripts via environment variable.
 % NOTE: MATLAB's setenv() does not reliably propagate to the embedded
 % Python interpreter's os.environ (confirmed on this setup), so we set
 % it directly through Python as well.
-project_root = fileparts(mfilename('fullpath'));
 setenv('EMBODY_PROJECT_ROOT', project_root);   % harmless to keep, in case other tools check it
 py.os.environ().update(py.dict(pyargs('EMBODY_PROJECT_ROOT', project_root)));
 
@@ -67,11 +90,6 @@ end
 
 %% === Export subject lists ===
 export_subject_lists(subjects, countries);
-
-fprintf('\nRunning generate_removal_lists.py...\n');
-fprintf('DEBUG: EMBODY_PROJECT_ROOT (MATLAB) = %s\n', getenv('EMBODY_PROJECT_ROOT'));
-fprintf('DEBUG: Python sees os.environ.get = %s\n', char(py.os.environ().get('EMBODY_PROJECT_ROOT', 'NOT SET')));
-pyrunfile(fullfile(pwd, 'python_scripts', 'generate_removal_lists.py'));
 
 %% === Generate removal lists (Python) ===
 fprintf('\nRunning generate_removal_lists.py...\n');
