@@ -7,9 +7,30 @@ Therefore, we use a .venv
 This script was written using MATLABR2024b, therefore for this to work, you will need a supported version of python installed and on your PATH. 
 
 (For more information on the version of python your version of MATLAB supports, visit https://www.mathworks.com/support/requirements/python-compatibility.html)
-(note: these scripts was originally written with Python 3.11. If you follow these steps and it still doesn't work, perhaps try Python3.11 specifically)
+(note: . 
+If you have a more recent version of MATLAB and compatible version of Python already on your PATH, you might be able to skip these steps. 
+However, these scripts was originally written with Python 3.11, and so the following instructions are written assuming you want that specific version. 
+If you skip these steps and it still doesn't work, perhaps try Python 3.11 specifically)
 
-Here is the link to download specific version of python for windows (scroll down for specific releases): https://www.python.org/downloads/
+Here are some **very** broad strokes steps for getting Python3.11 on your machine broken down by OS.
+
+Windows:
+Visit https://www.python.org/downloads/ and scroll down to 3.11.9
+Download the Windows Python Install manager
+Make sure to check "Add python.exe to PATH" before installing (If you forget, you can always add it manually afterwards)
+Open a fresh powershell and run `py -3.11 --version` to verify it's installed
+
+Mac:
+Same as Windows, except choose the macOS installer (and you might not need to add to PATH?)
+Open a fresh terminal and run `python3.11 --version`.
+
+Linux (If you're running Linux you don't need these instructions you little minx):
+Open a terminal and run:
+sudo apt update
+sudo apt install python3.11 python3.11-venv
+
+Verify with `python3.11 --version`
+
 
 The first time you open this script, you must run setup_python_env.m. 
 You can do this in the Matlab terminal by cd to your project root, then running setup_python_env.m
@@ -28,6 +49,9 @@ Once you see `=== Environment ready. You can now run preprocessing.m ===`,
 ```
    preprocessing
 ```
+
+If you ever run into python related issues, I would suggest first closing MATLAB then opening it again, and trying to run setup_python_env.m
+If that doesn't fix it, then delete the .venv folder and run setup_python_env.m again. 
 
 ## 2) Code pipeline and overview
 preprocessing.m:
@@ -85,7 +109,7 @@ regression.m:
 - Performs pixelwise regression on emotional valence
 
 regression_PCA.m:
-- Uses PCA
+- Uses PCA for regression
 
 ### 3) Structural information
 
@@ -116,7 +140,6 @@ Therefore, one of the important preprocessing steps for the filtered subjects is
 If a subject has at least 1 'pair', it is included in the preprocessed subfolder.
 All subjects (within the specified cohort) are included 
 
-
 The important subfolder structure is shown:
 >> ls subjects\
 
@@ -137,7 +160,7 @@ Where processed is a directory of all valid paired preprocessed.mat files and un
 The subjects subfolder is the raw pixel data. Preprocessed and Unfiltered are ephemeral whereas subjects is permanent. So don't delete anything from subjects/ unless you know what you're doing)
 
 An example is shown:
->> disp(load('subjects\US\preprocessed\mysubject_preprocessed.mat'))
+>> disp(load('subjects\US\preprocessed\mypreprocessedsubject_preprocessed.mat'))
             Nost2: [522×171 double]
             Nost3: [522×171 double]
             Nost4: [522×171 double]
@@ -147,5 +170,16 @@ An example is shown:
     nostalgia_avg: [522×171 double]
       control_avg: [522×171 double]
       valid_pairs: [2 3 4]
+
+Similarly:
+>> disp(load('subjects\US\unfiltered\myunfilteredsubject_preprocessed.mat'))
+            Nost1: [522×171 double]
+            Nost2: [522×171 double]
+            Nost3: [522×171 double]
+            Nost4: [522×171 double]
+            Cont2: [522×171 double]
+            Cont3: [522×171 double]
+    nostalgia_avg: [522×171 double]
+      control_avg: [522×171 double]
 
 Additionally, we also have a combined_data_all.csv that contains important information to be used. This lives in the project root and is created by preprocessing.m
