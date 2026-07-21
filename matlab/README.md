@@ -14,20 +14,20 @@ If you skip these steps and it still doesn't work, perhaps try Python 3.11 speci
 
 Here are some **very** broad strokes steps for getting Python3.11 on your machine broken down by OS.
 
-Windows:
-Visit https://www.python.org/downloads/ and scroll down to 3.11.9
-Download the Windows Python Install manager
-Make sure to check "Add python.exe to PATH" before installing (If you forget, you can always add it manually afterwards)
-Open a fresh powershell and run `py -3.11 --version` to verify it's installed
+Windows:  
+Visit https://www.python.org/downloads/ and scroll down to 3.11.9  
+Download the Windows Python Install manager  
+Make sure to check "Add python.exe to PATH" before installing (If you forget, you can always add it manually afterwards)  
+Open a fresh powershell and run `py -3.11 --version` to verify it's installed  
 
-Mac:
-Same as Windows, except choose the macOS installer (and you might not need to add to PATH?)
-Open a fresh terminal and run `python3.11 --version`.
+Mac:  
+Same as Windows, except choose the macOS installer (and you might not need to add to PATH?)  
+Open a fresh terminal and run `python3.11 --version`.  
 
-Linux (If you're running Linux you don't need these instructions you little minx):
-Open a terminal and run:
-sudo apt update
-sudo apt install python3.11 python3.11-venv
+Linux (If you're running Linux you don't need these instructions you little minx):  
+Open a terminal and run:  
+sudo apt update  
+sudo apt install python3.11 python3.11-venv  
 
 Verify with `python3.11 --version`
 
