@@ -24,6 +24,11 @@ Columns are countries (plus a "Total" column). Rows are:
 Gender and race are NOT cross-tabulated against each other — each is a
 simple per-country breakdown, independent of the other.
 
+Cells for Gender/Race/Consent Revoked rows are written as "N (XX.X%)",
+where the percentage denominator is the relevant group total (gender_total
+for gender rows, race_total for race rows, and the full country n for
+Consent Revoked). The Age row remains a plain "mean (SD)" string.
+
 Source columns (Prolific demographics, via combined_data_all.csv):
     Sex                     -> Gender
     Ethnicity simplified    -> Race   (Prolific's "Ethnicity simplified"
@@ -155,6 +160,13 @@ def flag_unmapped(subject_id: str, field_name: str, raw_value) -> None:
           f"in generate_demographics.py if this value should be accommodated.")
 
 
+def _fmt_pct(n: int, denom: int) -> str:
+    """Format a count as 'N (XX.X%)', guarding against a zero denominator."""
+    if denom > 0:
+        return f"{n} ({100 * n / denom:.1f}%)"
+    return f"{n} (n/a)"
+
+
 def build_country_column(df: pd.DataFrame, label: str) -> pd.Series:
     """Build one column (Series indexed by ROW_ORDER) of counts/stats for df."""
     is_consent_revoked = (df[SEX_COL] == CONSENT_REVOKED_VALUE) | (df[RACE_COL] == CONSENT_REVOKED_VALUE)
@@ -201,9 +213,22 @@ def build_country_column(df: pd.DataFrame, label: str) -> pd.Series:
     else:
         counts[AGE_ROW_LABEL] = "n/a"
 
+    gender_total = sum(counts[r] for r in GENDER_ROWS)
+    race_total = sum(counts[r] for r in RACE_ROWS)
+
     print(f"[DEBUG] '{label}' — n={len(df)}, consent revoked={n_consent_revoked}, "
-          f"gender total={sum(counts[r] for r in GENDER_ROWS)}, "
-          f"race total={sum(counts[r] for r in RACE_ROWS)}")
+          f"gender total={gender_total}, "
+          f"race total={race_total}")
+
+    # ── Convert raw counts into "N (XX.X%)" display cells ──────────────────
+    # Gender rows are a percentage of gender_total, race rows of race_total,
+    # and Consent Revoked a percentage of the full country/group n. Age is
+    # left as-is since it's already a "mean (SD)" string, not a count.
+    for row in GENDER_ROWS:
+        counts[row] = _fmt_pct(counts[row], gender_total)
+    for row in RACE_ROWS:
+        counts[row] = _fmt_pct(counts[row], race_total)
+    counts[CONSENT_REVOKED_ROW_LABEL] = _fmt_pct(n_consent_revoked, len(df))
 
     return pd.Series(counts, index=ROW_ORDER, name=label)
 
