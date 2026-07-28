@@ -102,6 +102,8 @@ apply_pruning(subjects, countries);
 fprintf('\n=== Subject counts after pruning ===\n');
 export_subject_lists(subjects, countries);
 
+song_count_check(cfg.subjects_dir, cfg.countries);
+
 %% === Build combined_data_all.csv (Python) ===
 fprintf('\nRunning build_combined_data.py...\n');
 pyrunfile(fullfile(pwd, 'python_scripts', 'build_combined_data.py'));
@@ -366,4 +368,65 @@ function apply_pruning(base_path, countries)
     end
 
     fprintf('\nPruning complete.\n');
+end
+
+%% =========================================================
+function song_count_check(subjects_dir, countries)
+%Tally nostalgia/control trial counts per subject
+    fprintf('\n=== Song count check ===\n');
+    pipelines = {'preprocessed', 'unfiltered'};
+
+    for p = 1:numel(pipelines)
+        pipeline   = pipelines{p};
+        total_nost = 0;
+        total_cont = 0;
+        n_subjects = 0;
+        n_flagged  = 0;
+
+        for i = 1:numel(countries)
+            country = countries{i};
+            if strcmp(country, 'all'), continue; end  % avoid double-counting the aggregate dir
+
+            dir_path = fullfile(subjects_dir, country, pipeline);
+            files    = dir(fullfile(dir_path, '*_preprocessed.mat'));
+
+            for j = 1:numel(files)
+                s  = load(fullfile(dir_path, files(j).name));
+                fn = fieldnames(s);
+
+                nost_count = sum(~cellfun('isempty', regexp(fn, '^Nost\d+$', 'once')));
+                cont_count = sum(~cellfun('isempty', regexp(fn, '^Cont\d+$', 'once')));
+
+                total_nost = total_nost + nost_count;
+                total_cont = total_cont + cont_count;
+                n_subjects = n_subjects + 1;
+
+                subj_name = strrep(files(j).name, '_preprocessed.mat', '');
+
+                if strcmp(pipeline, 'preprocessed')
+                    if nost_count ~= cont_count
+                        fprintf('  [FLAG] %s (%s): Nost=%d, Cont=%d — expected equal paired counts\n', ...
+                            subj_name, country, nost_count, cont_count);
+                        n_flagged = n_flagged + 1;
+                    end
+                else % unfiltered
+                    if nost_count < 4
+                        fprintf('  [FLAG] %s (%s): Nost=%d — expected at least 4 nostalgia trials\n', ...
+                            subj_name, country, nost_count);
+                        n_flagged = n_flagged + 1;
+                    end
+                end
+            end
+        end
+
+        total_songs = total_nost + total_cont;
+        fprintf('\n%s pipeline: %d subjects, %d nostalgia trials, %d control trials, %d total songs\n', ...
+            pipeline, n_subjects, total_nost, total_cont, total_songs);
+
+        if n_flagged > 0
+            fprintf('  %d subject(s) flagged for anomalous counts (see [FLAG] lines above)\n', n_flagged);
+        else
+            fprintf('  All subjects passed count check.\n');
+        end
+    end
 end
