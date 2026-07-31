@@ -7,34 +7,33 @@ Therefore, we use a .venv
 This script was written using MATLABR2024b, therefore for this to work, you will need a supported version of python installed and on your PATH. 
 
 (For more information on the version of python your version of MATLAB supports, visit https://www.mathworks.com/support/requirements/python-compatibility.html)
-(note: . 
-If you have a more recent version of MATLAB and compatible version of Python already on your PATH, you might be able to skip these steps. 
+(note: If you have a more recent version of MATLAB and compatible version of Python already on your PATH, you might be able to skip these steps. 
 However, these scripts was originally written with Python 3.11, and so the following instructions are written assuming you want that specific version. 
-If you skip these steps and it still doesn't work, perhaps try Python 3.11 specifically)
+If you skip these steps and it still doesn't work, perhaps try Python 3.11 specifically)  
 
-Here are some **very** broad strokes steps for getting Python3.11 on your machine broken down by OS.
+Here are some **very** broad strokes steps for getting Python3.11 on your machine broken down by OS.  
 
-Windows:
-Visit https://www.python.org/downloads/ and scroll down to 3.11.9
-Download the Windows Python Install manager
-Make sure to check "Add python.exe to PATH" before installing (If you forget, you can always add it manually afterwards)
-Open a fresh powershell and run `py -3.11 --version` to verify it's installed
+Windows:  
+Visit https://www.python.org/downloads/ and scroll down to 3.11.9  
+Download the Windows Python Install manager  
+Make sure to check "Add python.exe to PATH" before installing (If you forget, you can always add it manually afterwards)  
+Open a fresh powershell and run `py -3.11 --version` to verify it's installed  
 
-Mac:
-Same as Windows, except choose the macOS installer (and you might not need to add to PATH?)
-Open a fresh terminal and run `python3.11 --version`.
+Mac:  
+Same as Windows, except choose the macOS installer (and you might not need to add to PATH?)  
+Open a fresh terminal and run `python3.11 --version`.  
 
-Linux (If you're running Linux you don't need these instructions you little minx):
-Open a terminal and run:
-sudo apt update
-sudo apt install python3.11 python3.11-venv
+Linux (If you're running Linux you don't need these instructions you little minx):  
+Open a terminal and run:  
+sudo apt update  
+sudo apt install python3.11 python3.11-venv  
 
 Verify with `python3.11 --version`
 
 
 The first time you open this script, you must run setup_python_env.m. 
-You can do this in the Matlab terminal by cd to your project root, then running setup_python_env.m
-Alternatively, you can open the script, switch to the editor tab at the top of the screen and click the green arrow that says "Run"
+You can do this in the Matlab terminal by cd to your project root, then running setup_python_env.m  
+Alternatively, you can open the script, switch to the editor tab at the top of the screen and click the green arrow that says "Run"  
 
  This will:
    - create a project-local `.venv` at the project root (via
@@ -50,7 +49,7 @@ Once you see `=== Environment ready. You can now run preprocessing.m ===`,
    preprocessing
 ```
 
-If you ever run into python related issues, I would suggest first closing MATLAB then opening it again, and trying to run setup_python_env.m
+If you ever run into python related issues, I would suggest first closing MATLAB then opening it again, and trying to run setup_python_env.m  
 If that doesn't fix it, then delete the .venv folder and run setup_python_env.m again. 
 
 ## 2) Code pipeline and overview
@@ -68,14 +67,14 @@ preprocessing.m:
 ### After preprocessing.m is run, you can run any of the other actual analysis scripts to your hearts content. 
 
 ### Python Scripts
-You can run any of the python scripts by calling pyrunfile from the project root, i.e. (pyrunfile("python_scripts/analyse_ratings.py"))
-The first time you run this script, you'll probably get the following error:
->> pyrunfile("python_scripts/analyse_ratings.py")
-Error using <string>><module> (line 51)
-Python Error: RuntimeError: EMBODY_PROJECT_ROOT is not set. This script cannot infer its own location when
-run via pyrunfile(), so the caller must set this environment variable explicitly before invoking
-analyse_ratings.py.
-From MATLAB, set it via:
+You can run any of the python scripts by calling pyrunfile from the project root, i.e. (pyrunfile("python_scripts/analyse_ratings.py"))  
+The first time you run this script, you'll probably get the following error:  
+>> pyrunfile("python_scripts/analyse_ratings.py")  
+Error using <string>><module> (line 51)  
+Python Error: RuntimeError: EMBODY_PROJECT_ROOT is not set. This script cannot infer its own location when  
+run via pyrunfile(), so the caller must set this environment variable explicitly before invoking  
+analyse_ratings.py.  
+From MATLAB, set it via:  
   py.os.environ().update(py.dict(pyargs('EMBODY_PROJECT_ROOT', project_root)))
 
 To fix this simply cd to the project root and run pwd to print the working directory. Then run the command as it says, i.e. 
@@ -86,7 +85,7 @@ Then just run pyrunfile() again.
 
 
 build_combined_data.py and generate_removal_lists.py are called by preprocessing.m; you likely won't need to call them yourself. 
-analyse_ratings.py generates statistics about the nostalgia and control songs
+analyse_ratings.py generates statistics about the nostalgia and control songs  
 generate_demographics.py generates demographics data for the preprocessed and unfiltered cohorts
 
 --------------------
