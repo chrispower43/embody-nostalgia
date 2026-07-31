@@ -9,7 +9,7 @@ close all
 cfg       = read_config();
 countries = cfg.countries;
 
-output_folder = cfg.pic_pq1and3;
+output_folder = [cfg.pic_pq1and3, 'contovernost'];
 if ~exist(output_folder, 'dir')
     mkdir(output_folder);
 else
