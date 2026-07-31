@@ -3,14 +3,26 @@
 clear
 close all
 
+diary_folder = 'LDA';
+diary_file = fullfile(diary_folder, 'LOSO_results.txt');
+if ~exist(diary_folder, 'dir')
+    mkdir(diary_folder);
+end
+if isfile(diary_file)
+    delete(diary_file);
+end
+diary(diary_file);
+diary on;
+
 cfg = read_config();
-countries = [cfg.countries, {'all'}];   % {'BR','IN','US','SP','JP','all'}
+countries = [cfg.countries];   % {'BR','IN','US','SP','JP'}
 
 for i = 1:length(countries)
     subdir = countries{i};
     run_LDA_by_group(fullfile(cfg.subjects_dir, subdir), subdir);
 end
 
+diary off;
 function run_LDA_by_group(basepath, country)
     mask = imread('mask.png');
     in_mask = find(mask > 128);

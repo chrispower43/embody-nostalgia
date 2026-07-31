@@ -1,6 +1,17 @@
 %% PCA followed by LDA: Leave-One-Country-Out (LOCO)
 clear; close all;
 
+diary_folder = 'LDA';
+diary_file = fullfile(diary_folder, 'LOCO_results.txt');
+if ~exist(diary_folder, 'dir')
+    mkdir(diary_folder);
+end
+if isfile(diary_file)
+    delete(diary_file);
+end
+diary(diary_file);
+diary on;
+
 cfg = read_config();
 countries = cfg.countries;   % {'BR','IN','US','SP','JP'}
 
@@ -17,7 +28,12 @@ for i = 1:length(countries)
     [X_test,  y_test]  = load_multiple_countries(cfg.subjects_dir, {test_country});
 
     num_components = 30;
+
+    warning('off', 'stats:pca:ColRankDefX');
     [coeff, score, ~, ~, ~, mu] = pca(X_train, 'NumComponents', num_components);
+    warning('on', 'stats:pca:ColRankDefX');
+
+
     X_train_reduced = score;
     X_test_reduced  = (X_test - mu) * coeff;
 
@@ -36,6 +52,7 @@ end
 
 disp('--- Final LOCO Results ---');
 disp(struct2table(loco_results));
+diary off;
 
 function [X, y] = load_multiple_countries(subjects_dir, country_list)
     mask = imread('mask.png');

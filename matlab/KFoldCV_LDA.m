@@ -3,6 +3,17 @@
 clear
 close all
 
+diary_folder = 'LDA';
+diary_file = fullfile(diary_folder, 'kfold_cv_results.txt');
+if ~exist(diary_folder, 'dir')
+    mkdir(diary_folder);
+end
+if isfile(diary_file)
+    delete(diary_file);
+end
+diary(diary_file);
+diary on;
+
 cfg = read_config();
 countries = [cfg.countries, {'all'}];
 
@@ -10,6 +21,7 @@ for i = 1:length(countries)
     subdir = countries{i};
     run_LDA_by_group(fullfile(cfg.subjects_dir, subdir), subdir);
 end
+diary off;
 
 function run_LDA_by_group(basepath, country)
     mask = imread('mask.png');
@@ -83,7 +95,10 @@ function run_LDA_by_group(basepath, country)
         X_test_raw  = X_all(test_idx, :);
         y_test      = labels(test_idx);
 
+        warning('off', 'stats:pca:ColRankDefX');
         [coeff, score, ~, ~, ~, mu] = pca(X_train_raw, 'NumComponents', num_components);
+        warning('on', 'stats:pca:ColRankDefX');
+        
         X_train_reduced = score;
         X_test_reduced  = (X_test_raw - mu) * coeff;
 
