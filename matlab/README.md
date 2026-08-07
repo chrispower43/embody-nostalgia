@@ -53,6 +53,9 @@ If you ever run into python related issues, I would suggest first closing MATLAB
 If that doesn't fix it, then delete the .venv folder and run setup_python_env.m again. 
 
 ## 2) Code pipeline and overview
+run_all.m:
+- Just calls and runs all the relevant scripts
+
 preprocessing.m:
 - Should be run at the beginning of every analysis pipeline. 
 - Masks out pixel data and applies gaussian filter.
