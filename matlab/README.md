@@ -52,6 +52,10 @@ Once you see `=== Environment ready. You can now run preprocessing.m ===`,
 If you ever run into python related issues, I would suggest first closing MATLAB then opening it again, and trying to run setup_python_env.m  
 If that doesn't fix it, then delete the .venv folder and run setup_python_env.m again. 
 
+(MAC: If you are still having issues, you can try just adding to PATH:  
+setenv("PATH", "/Library/Developer/CommandLineTools/usr/bin:" + getenv("PATH"))  
+)  
+
 ## 2) Code pipeline and overview
 run_all.m:
 - Just calls and runs all the relevant scripts
