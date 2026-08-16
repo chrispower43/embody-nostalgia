@@ -3,72 +3,83 @@
 %  Two output styles, both sharing the same global color scale per condition:
 %    1) Collective grid  — one panel per country + 'all', per condition (4 figures)
 %    2) Individual panels — one figure per country, per stat type (2 figures/country)
-clear
-close all
-
-cfg       = read_config();
-countries = cfg.countries;   % {'BR','IN','US','SP','JP'}
-
-output_folder = cfg.pic_pq0;
-if ~exist(output_folder, 'dir')
-    mkdir(output_folder);
-else
-    delete(fullfile(output_folder, '*.png'));
-    fprintf('Cleared existing pictures in %s\n', output_folder);
+function zero_ttest(~)
+    close all
+    
+    cfg       = read_config();
+    
+   if nargin < 1
+        countries = cfg.countries;
+        output_folder = [cfg.pic_pq0];
+        if ~exist(output_folder, 'dir')
+            mkdir(output_folder);
+        else
+            delete(fullfile(output_folder, '*.png'));
+            fprintf('Cleared existing pictures in %s\n', output_folder);
+        end
+    else 
+        countries = cfg.countries_all;
+        output_folder = [cfg.pic_pq0, '_all'];
+        if ~exist(output_folder, 'dir')
+            mkdir(output_folder);
+        else
+            delete(fullfile(output_folder, '*.png'));
+            fprintf('Cleared existing pictures in %s\n', output_folder);
+        end
+    end
+    
+    mask    = imread('mask.png');
+    in_mask = find(mask > 128);
+    fprintf('Mask dimensions: %d x %d\n', size(mask,1), size(mask,2));
+    
+    base  = uint8(imread('base.png'));
+    base2 = base(10:531, 33:203, :);
+    
+    n_countries = numel(countries);
+    results = struct('name', {}, 'NS', {}, 'tID', {}, 'tvals_sig', {}, ...
+                      'mean_control_img', {}, 'mean_nostalgia_img', {}, 'Mmean', {});
+    
+    %% Pass 1: compute per-country t-test, FDR threshold, sig-gated t-maps, mean maps
+    for i = 1:n_countries
+        country_name = countries{i};
+        basepath = fullfile(cfg.subjects_dir, country_name, 'preprocessed', filesep);
+        results(i) = compute_country_stats(basepath, country_name, mask, in_mask);
+    end
+    
+    %% Global color limits — one per condition, shared by EVERY figure below,
+    %  both the collective grids and the individual per-country panels.
+    M_nost = max(arrayfun(@(r) safe_max_abs(r.tvals_sig(:,:,2)), results));
+    M_cont = max(arrayfun(@(r) safe_max_abs(r.tvals_sig(:,:,1)), results));
+    if M_nost == 0, M_nost = 1; end
+    if M_cont == 0, M_cont = 1; end
+    
+    M_mean_nost = max(arrayfun(@(r) safe_max_abs(r.mean_nostalgia_img), results));
+    M_mean_cont = max(arrayfun(@(r) safe_max_abs(r.mean_control_img), results));
+    if M_mean_nost == 0, M_mean_nost = 1; end
+    if M_mean_cont == 0, M_mean_cont = 1; end
+    
+    tmap_cmap = build_hotcold_colormap(64, 1);                 % cosmetic dead-zone; gating is via zeroed data
+    meanmap_cmap = build_hotcold_colormap(64, round(0.05*64)); % no gating for means, dead-zone is cosmetic only
+    
+    %% (1) Collective grids — 4 figures total
+    plot_grid(results, 'tval', 2, M_nost, tmap_cmap, base2, mask, 'Nostalgia — T-test vs zero', ...
+        fullfile(output_folder, sprintf('%sTmap_grid_Nostalgia.png', cfg.pic_prefix)));
+    plot_grid(results, 'tval', 1, M_cont, tmap_cmap, base2, mask, 'Control — T-test vs zero', ...
+        fullfile(output_folder, sprintf('%sTmap_grid_Control.png', cfg.pic_prefix)));
+    plot_grid(results, 'mean', 2, M_mean_nost, meanmap_cmap, base2, mask, 'Nostalgia — Mean activation', ...
+        fullfile(output_folder, sprintf('%sMeanMap_grid_Nostalgia.png', cfg.pic_prefix)));
+    plot_grid(results, 'mean', 1, M_mean_cont, meanmap_cmap, base2, mask, 'Control — Mean activation', ...
+        fullfile(output_folder, sprintf('%sMeanMap_grid_Control.png', cfg.pic_prefix)));
+    
+    %% (2) Individual per-country panels — 2 figures per country, same global M's
+    for i = 1:n_countries
+        r = results(i);
+        plot_country_panel(r, 'tval', M_cont, M_nost, tmap_cmap, base2, mask, ...
+            output_folder, cfg.pic_prefix, 'Tmap');
+        plot_country_panel(r, 'mean', M_mean_cont, M_mean_nost, meanmap_cmap, base2, mask, ...
+            output_folder, cfg.pic_prefix, 'MeanMap');
+    end
 end
-
-mask    = imread('mask.png');
-in_mask = find(mask > 128);
-fprintf('Mask dimensions: %d x %d\n', size(mask,1), size(mask,2));
-
-base  = uint8(imread('base.png'));
-base2 = base(10:531, 33:203, :);
-
-n_countries = numel(countries);
-results = struct('name', {}, 'NS', {}, 'tID', {}, 'tvals_sig', {}, ...
-                  'mean_control_img', {}, 'mean_nostalgia_img', {}, 'Mmean', {});
-
-%% Pass 1: compute per-country t-test, FDR threshold, sig-gated t-maps, mean maps
-for i = 1:n_countries
-    country_name = countries{i};
-    basepath = fullfile(cfg.subjects_dir, country_name, 'preprocessed', filesep);
-    results(i) = compute_country_stats(basepath, country_name, mask, in_mask);
-end
-
-%% Global color limits — one per condition, shared by EVERY figure below,
-%  both the collective grids and the individual per-country panels.
-M_nost = max(arrayfun(@(r) safe_max_abs(r.tvals_sig(:,:,2)), results));
-M_cont = max(arrayfun(@(r) safe_max_abs(r.tvals_sig(:,:,1)), results));
-if M_nost == 0, M_nost = 1; end
-if M_cont == 0, M_cont = 1; end
-
-M_mean_nost = max(arrayfun(@(r) safe_max_abs(r.mean_nostalgia_img), results));
-M_mean_cont = max(arrayfun(@(r) safe_max_abs(r.mean_control_img), results));
-if M_mean_nost == 0, M_mean_nost = 1; end
-if M_mean_cont == 0, M_mean_cont = 1; end
-
-tmap_cmap = build_hotcold_colormap(64, 1);                 % cosmetic dead-zone; gating is via zeroed data
-meanmap_cmap = build_hotcold_colormap(64, round(0.05*64)); % no gating for means, dead-zone is cosmetic only
-
-%% (1) Collective grids — 4 figures total
-plot_grid(results, 'tval', 2, M_nost, tmap_cmap, base2, mask, 'Nostalgia — T-test vs zero', ...
-    fullfile(output_folder, sprintf('%sTmap_grid_Nostalgia.png', cfg.pic_prefix)));
-plot_grid(results, 'tval', 1, M_cont, tmap_cmap, base2, mask, 'Control — T-test vs zero', ...
-    fullfile(output_folder, sprintf('%sTmap_grid_Control.png', cfg.pic_prefix)));
-plot_grid(results, 'mean', 2, M_mean_nost, meanmap_cmap, base2, mask, 'Nostalgia — Mean activation', ...
-    fullfile(output_folder, sprintf('%sMeanMap_grid_Nostalgia.png', cfg.pic_prefix)));
-plot_grid(results, 'mean', 1, M_mean_cont, meanmap_cmap, base2, mask, 'Control — Mean activation', ...
-    fullfile(output_folder, sprintf('%sMeanMap_grid_Control.png', cfg.pic_prefix)));
-
-%% (2) Individual per-country panels — 2 figures per country, same global M's
-for i = 1:n_countries
-    r = results(i);
-    plot_country_panel(r, 'tval', M_cont, M_nost, tmap_cmap, base2, mask, ...
-        output_folder, cfg.pic_prefix, 'Tmap');
-    plot_country_panel(r, 'mean', M_mean_cont, M_mean_nost, meanmap_cmap, base2, mask, ...
-        output_folder, cfg.pic_prefix, 'MeanMap');
-end
-
 
 %% ───────────────────────── Helper functions ─────────────────────────
 

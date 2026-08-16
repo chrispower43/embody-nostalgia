@@ -3,73 +3,85 @@
 %  Two output styles, both sharing the same global color scale:
 %    1) Collective grid   — one panel per country + 'all' (2 figures: Tmap, AvgDiff)
 %    2) Individual panels — one figure per country, per stat type (2 figures/country)
-clear
-close all
+function control_over_nostalgia_ttest(~)
+    close all
+    
+    cfg = read_config();
 
-cfg       = read_config();
-countries = cfg.countries;
-
-output_folder = [cfg.pic_pq1and3, 'contovernost'];
-if ~exist(output_folder, 'dir')
-    mkdir(output_folder);
-else
-    delete(fullfile(output_folder, '*.png'));
-    fprintf('Cleared existing pictures in %s\n', output_folder);
-end
-
-mask    = imread('mask.png');
-in_mask = find(mask > 128);
-
-base  = uint8(imread('base.png'));
-base2 = base(10:531, 33:203, :);
-
-n_countries = numel(countries);
-results = struct('name', {}, 'NS', {}, 'tID', {}, 'tvals_sig', {}, 'diff_img', {});
-
-%% Pass 1: compute per-country paired t-test, FDR threshold, sig-gated t-map, avg diff
-for i = 1:n_countries
-    country_name      = countries{i};
-    preprocessed_dir  = fullfile(cfg.subjects_dir, country_name, 'preprocessed');
-    if ~exist(preprocessed_dir, 'dir')
-        fprintf('Directory not found: %s — skipping %s\n', preprocessed_dir, country_name);
-        results(i) = empty_result(country_name);
-        continue;
+    if nargin < 1
+        countries = cfg.countries;
+        output_folder = [cfg.pic_pq1and3, 'contovernost'];
+        if ~exist(output_folder, 'dir')
+            mkdir(output_folder);
+        else
+            delete(fullfile(output_folder, '*.png'));
+            fprintf('Cleared existing pictures in %s\n', output_folder);
+        end
+    else 
+        countries = cfg.countries_all;
+        output_folder = [cfg.pic_pq1and3, 'contovernost_all'];
+        if ~exist(output_folder, 'dir')
+            mkdir(output_folder);
+        else
+            delete(fullfile(output_folder, '*.png'));
+            fprintf('Cleared existing pictures in %s\n', output_folder);
+        end
     end
-    fprintf('\n%s Analyzing %s %s\n', repmat('=',1,20), country_name, repmat('=',1,20));
-    results(i) = compute_country_stats(preprocessed_dir, country_name, mask, in_mask);
+
+   
+    mask    = imread('mask.png');
+    in_mask = find(mask > 128);
+    
+    base  = uint8(imread('base.png'));
+    base2 = base(10:531, 33:203, :);
+    
+    n_countries = numel(countries);
+    results = struct('name', {}, 'NS', {}, 'tID', {}, 'tvals_sig', {}, 'diff_img', {});
+    
+    %% Pass 1: compute per-country paired t-test, FDR threshold, sig-gated t-map, avg diff
+    for i = 1:n_countries
+        country_name      = countries{i};
+        preprocessed_dir  = fullfile(cfg.subjects_dir, country_name, 'preprocessed');
+        if ~exist(preprocessed_dir, 'dir')
+            fprintf('Directory not found: %s — skipping %s\n', preprocessed_dir, country_name);
+            results(i) = empty_result(country_name);
+            continue;
+        end
+        fprintf('\n%s Analyzing %s %s\n', repmat('=',1,20), country_name, repmat('=',1,20));
+        results(i) = compute_country_stats(preprocessed_dir, country_name, mask, in_mask);
+    end
+    
+    % Drop any countries that had no directory (kept as empty placeholders above
+    % so indexing stays aligned during the loop; excluded from here on)
+    valid = arrayfun(@(r) r.NS > 0, results);
+    results = results(valid);
+    
+    %% Global color limits — shared by every figure below (grids AND individual panels)
+    M_t    = max(arrayfun(@(r) safe_max_abs(r.tvals_sig), results));
+    M_diff = max(arrayfun(@(r) safe_max_abs(r.diff_img), results));
+    if M_t == 0, M_t = 1; end
+    if M_diff == 0, M_diff = 1; end
+    
+    tmap_cmap = build_hotcold_colormap(64, 1);          % cosmetic dead-zone; gating done via zeroed data
+    diff_cmap = build_hotcold_colormap_nogap(64);        % matches original diff colormap (no dead zone)
+    
+    %% (1) Collective grids
+    plot_grid(results, 'tval', M_t, tmap_cmap, base2, mask, ...
+        'Nostalgia < Control — T-test', ...
+        fullfile(output_folder, sprintf('%sTmap_grid.png', cfg.pic_prefix)));
+    plot_grid(results, 'diff', M_diff, diff_cmap, base2, mask, ...
+        'Nostalgia - Mean - Control difference', ...
+        fullfile(output_folder, sprintf('%sAvgDiff_grid.png', cfg.pic_prefix)));
+    
+    %% (2) Individual per-country panels — 2 figures per country, same global M's
+    for i = 1:numel(results)
+        r = results(i);
+        plot_country_panel(r, 'tval', M_t, tmap_cmap, base2, mask, ...
+            output_folder, cfg.pic_prefix, 'Tmap');
+        plot_country_panel(r, 'diff', M_diff, diff_cmap, base2, mask, ...
+            output_folder, cfg.pic_prefix, 'AvgDiff');
+    end
 end
-
-% Drop any countries that had no directory (kept as empty placeholders above
-% so indexing stays aligned during the loop; excluded from here on)
-valid = arrayfun(@(r) r.NS > 0, results);
-results = results(valid);
-
-%% Global color limits — shared by every figure below (grids AND individual panels)
-M_t    = max(arrayfun(@(r) safe_max_abs(r.tvals_sig), results));
-M_diff = max(arrayfun(@(r) safe_max_abs(r.diff_img), results));
-if M_t == 0, M_t = 1; end
-if M_diff == 0, M_diff = 1; end
-
-tmap_cmap = build_hotcold_colormap(64, 1);          % cosmetic dead-zone; gating done via zeroed data
-diff_cmap = build_hotcold_colormap_nogap(64);        % matches original diff colormap (no dead zone)
-
-%% (1) Collective grids
-plot_grid(results, 'tval', M_t, tmap_cmap, base2, mask, ...
-    'Nostalgia < Control — T-test', ...
-    fullfile(output_folder, sprintf('%sTmap_grid.png', cfg.pic_prefix)));
-plot_grid(results, 'diff', M_diff, diff_cmap, base2, mask, ...
-    'Nostalgia - Mean - Control difference', ...
-    fullfile(output_folder, sprintf('%sAvgDiff_grid.png', cfg.pic_prefix)));
-
-%% (2) Individual per-country panels — 2 figures per country, same global M's
-for i = 1:numel(results)
-    r = results(i);
-    plot_country_panel(r, 'tval', M_t, tmap_cmap, base2, mask, ...
-        output_folder, cfg.pic_prefix, 'Tmap');
-    plot_country_panel(r, 'diff', M_diff, diff_cmap, base2, mask, ...
-        output_folder, cfg.pic_prefix, 'AvgDiff');
-end
-
 
 %% ───────────────────────── Helper functions ─────────────────────────
 
