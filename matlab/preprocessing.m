@@ -373,6 +373,16 @@ end
 %% =========================================================
 function song_count_check(subjects_dir, countries)
 %Tally nostalgia/control trial counts per subject
+    
+    
+    log_file = fullfile('songs_count.txt');
+    if exist(log_file, 'file')
+        delete(log_file);
+    end
+    diary on
+
+    diary(log_file);
+
     fprintf('\n=== Song count check ===\n');
     pipelines = {'preprocessed', 'unfiltered'};
 
@@ -429,4 +439,8 @@ function song_count_check(subjects_dir, countries)
             fprintf('  All subjects passed count check.\n');
         end
     end
+
+    % Stop capturing console output
+    diary off;
+    fprintf('\nResults saved to: %s\n', log_file);
 end
