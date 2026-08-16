@@ -88,6 +88,7 @@ Then just run pyrunfile() again.
 
 
 build_combined_data.py and generate_removal_lists.py are called by preprocessing.m; you likely won't need to call them yourself. 
+
 analyse_ratings.py generates statistics about the nostalgia and control songs  
 generate_demographics.py generates demographics data for the preprocessed and unfiltered cohorts
 
@@ -95,8 +96,13 @@ generate_demographics.py generates demographics data for the preprocessed and un
 zero_ttest.m:
 - Runs a t-test against zero, only plots threshold of p=0.05
 
-paired_ttest.m:
-- Paired t-tests, only plots threshold p=0.05.
+nostalgia_over_control_ttest.m:
+- Nostalgia over Control t-tests, only plots threshold p=0.05.
+- Including any argument includes all/ directory
+
+control_over_nostalgia_ttest.m:
+- Control over Nostalgia t-tests, only plots threshold p=0.05.
+- Including any argument includes all/ directory
 
 KFoldCV_LDA.m:
 - Performs a k-fold cross validation LDA. (5-fold to match country count)
@@ -104,14 +110,11 @@ KFoldCV_LDA.m:
 LDA_LOCO.m: 
 - Performs a leave one country out LDA. i.e. trains on the other countries, tests on held out country. 
 
-LOO_LDA.m:
-- Performs a leave one participant out LDA. Takes a while to run, especially if you include all/. 
-
 regression.m:
 - Performs pixelwise regression on emotional valence
 
-regression_PCA.m:
-- Uses PCA for regression
+exploratory.m:
+- Runs exploratory regression analysis on SNS, SES, and BMRQ
 
 ### 3) Structural information
 
